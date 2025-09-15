@@ -53,7 +53,7 @@ void loop()
 {
     unsigned long currentMillis = millis();
     
-    if (currentMillis - previousMillis >= interval)
+    if (inMainScreen && currentMillis - previousMillis >= interval)
     {
         previousMillis = currentMillis;
         updateDisplay();
@@ -64,6 +64,12 @@ void loop()
             lastDebug = currentMillis;
             printDebugInfo();
         }
+    }
+    
+    if (!inMainScreen && currentMillis - previousMillis >= 100)
+    {
+        previousMillis = currentMillis;
+        showGraphScreen();
     }
     
     if (digitalRead(BUTTON_LEFT) == LOW)

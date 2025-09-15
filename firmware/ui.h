@@ -83,7 +83,7 @@ void drawButtons()
 void drawTerminalHeader()
 {
     tft.fillRect(0, 0, tft.width(), 30, TERMINAL_HEADER);
-    const char* title = "HackOchi v0.5";
+    const char* title = "HackOchi v0.6";
     int textWidth = getTextWidth(title);
     drawText(title, (tft.width() - textWidth) / 2, 8, ILI9341_WHITE);
 }
@@ -162,28 +162,173 @@ void showHumidityScreen()
 
 void showGraphScreen()
 {
-    inMainScreen = false;
-    tft.fillScreen(TERMINAL_BG);
-    drawTerminalHeader();
-    
-    drawText("GRAPH VIEW", 80, 40, TERMINAL_GREEN);
-    tft.drawFastHLine(10, 60, tft.width() - 20, TERMINAL_GREEN);
-    
-    drawText("Temperature Graph", 20, 80);
-    for (int i = 0; i < 10; i++)
-    {
-        int height = random(5, 50);
-        tft.fillRect(20 + i * 30, 150 - height, 20, height, TERMINAL_GREEN);
+    static bool firstRun = true;
+    static unsigned long lastUpdate = 0;
+    static const int numPoints = 30;
+    static float tempData[30] = {0};
+    static float humData[30] = {0};
+    static int dataCount = 0;
+
+    const int graphWidth = tft.width() - 2;
+    const int graphHeight = (tft.height() - 30) / 2 - 2;
+    const int tempGraphY = 30 + 1;
+    const int humGraphY = 30 + graphHeight + 3;
+    const uint16_t gridColor = 0x0420;
+
+    if (firstRun) {
+        inMainScreen = false;
+        tft.fillScreen(TERMINAL_BG);
+        drawTerminalHeader();
+        for (int i = 0; i < numPoints; i++) {
+            tempData[i] = 25.0;
+            humData[i] = 50.0;
+        }
+        readDHTData();
+        if (!isnan(temperature) && temperature >= 0 && temperature <= 100) {
+            tempData[0] = temperature;
+        }
+        if (!isnan(humidity) && humidity >= 0 && humidity <= 100) {
+            humData[0] = humidity;
+        }
+        dataCount = 1;
+        firstRun = false;
     }
-    
-    drawText("Humidity Graph", 20, 170);
-    for (int i = 0; i < 10; i++)
-    {
-        int height = random(5, 50);
-        tft.fillRect(20 + i * 30, 240 - height, 20, height, TERMINAL_BLUE);
+
+    if (millis() - lastUpdate >= 3000) {
+        readDHTData();
+        float newTemp = temperature;
+        float newHum = humidity;
+        if (isnan(newTemp) || newTemp < 0 || newTemp > 100) {
+            newTemp = tempData[(dataCount - 1) % numPoints];
+        }
+        if (isnan(newHum) || newHum < 0 || newHum > 100) {
+            newHum = humData[(dataCount - 1) % numPoints];
+        }
+        if (dataCount < numPoints) {
+            tempData[dataCount] = newTemp;
+            humData[dataCount] = newHum;
+            dataCount++;
+        } else {
+            for (int i = 0; i < numPoints - 1; i++) {
+                tempData[i] = tempData[i + 1];
+                humData[i] = humData[i + 1];
+            }
+            tempData[numPoints - 1] = newTemp;
+            humData[numPoints - 1] = newHum;
+        }
+        lastUpdate = millis();
     }
-    
-    drawText("Press SELECT to return", 20, 250, TERMINAL_AMBER);
+
+    clearArea(1, tempGraphY, graphWidth, graphHeight);
+    clearArea(1, humGraphY, graphWidth, graphHeight);
+
+    float tempMin = tempData[0];
+    float tempMax = tempData[0];
+    for (int i = 1; i < dataCount && i < numPoints; i++) {
+        if (tempData[i] < tempMin) tempMin = tempData[i];
+        if (tempData[i] > tempMax) tempMax = tempData[i];
+    }
+    tempMin -= 5.0;
+    tempMax += 5.0;
+    if (tempMax - tempMin < 10.0) {
+        tempMax = tempMin + 10.0;
+    }
+
+    tft.drawFastHLine(0, tempGraphY - 1, tft.width(), TERMINAL_GREEN);
+    tft.drawFastHLine(0, tempGraphY + graphHeight, tft.width(), TERMINAL_GREEN);
+    tft.drawFastVLine(0, tempGraphY - 1, graphHeight + 2, TERMINAL_GREEN);
+    tft.drawFastVLine(tft.width() - 1, tempGraphY - 1, graphHeight + 2, TERMINAL_GREEN);
+
+    for (int i = 1; i <= 3; i++) {
+        int y = tempGraphY + (graphHeight * i) / 4;
+        tft.drawFastHLine(1, y, graphWidth, gridColor);
+    }
+    for (int i = 1; i <= 4; i++) {
+        int x = 1 + (graphWidth * i) / 5;
+        tft.drawFastVLine(x, tempGraphY, graphHeight, gridColor);
+    }
+
+    char label[10];
+    snprintf(label, sizeof(label), "%.0fC", tempMax);
+    drawText(label, 2, tempGraphY - 5, TERMINAL_GREEN);
+    snprintf(label, sizeof(label), "%.0fC", (tempMax + tempMin) / 2);
+    drawText(label, 2, tempGraphY + graphHeight / 2 - 5, TERMINAL_GREEN);
+    snprintf(label, sizeof(label), "%.0fC", tempMin);
+    drawText(label, 2, tempGraphY + graphHeight - 5, TERMINAL_GREEN);
+
+    snprintf(label, sizeof(label), "%.1fC", tempData[(dataCount - 1) % numPoints]);
+    int textWidth = getTextWidth(label);
+    drawText(label, graphWidth - textWidth - 2, tempGraphY - 5, TERMINAL_GREEN);
+
+    float xStep = (float)graphWidth / (numPoints - 1);
+    for (int i = 0; i < dataCount - 1 && i < numPoints - 1; i++) {
+        float temp1 = tempData[i];
+        float temp2 = tempData[i + 1];
+        int x1 = 1 + (int)(i * xStep);
+        int x2 = 1 + (int)((i + 1) * xStep);
+        int y1 = tempGraphY + graphHeight - (int)(map(temp1 * 10, tempMin * 10, tempMax * 10, 0, graphHeight));
+        int y2 = tempGraphY + graphHeight - (int)(map(temp2 * 10, tempMin * 10, tempMax * 10, 0, graphHeight));
+        y1 = constrain(y1, tempGraphY, tempGraphY + graphHeight);
+        y2 = constrain(y2, tempGraphY, tempGraphY + graphHeight);
+        x1 = constrain(x1, 1, graphWidth);
+        x2 = constrain(x2, 1, graphWidth);
+        tft.drawLine(x1, y1, x2, y2, TERMINAL_GREEN);
+    }
+
+    float humMin = humData[0];
+    float humMax = humData[0];
+    for (int i = 1; i < dataCount && i < numPoints; i++) {
+        if (humData[i] < humMin) humMin = humData[i];
+        if (humData[i] > humMax) humMax = humData[i];
+    }
+    humMin -= 10.0;
+    humMax += 10.0;
+    if (humMax - humMin < 20.0) {
+        humMax = humMin + 20.0;
+    }
+
+    tft.drawFastHLine(0, humGraphY - 1, tft.width(), TERMINAL_GREEN);
+    tft.drawFastHLine(0, humGraphY + graphHeight, tft.width(), TERMINAL_GREEN);
+    tft.drawFastVLine(0, humGraphY - 1, graphHeight + 2, TERMINAL_GREEN);
+    tft.drawFastVLine(tft.width() - 1, humGraphY - 1, graphHeight + 2, TERMINAL_GREEN);
+
+    for (int i = 1; i <= 3; i++) {
+        int y = humGraphY + (graphHeight * i) / 4;
+        tft.drawFastHLine(1, y, graphWidth, gridColor);
+    }
+    for (int i = 1; i <= 4; i++) {
+        int x = 1 + (graphWidth * i) / 5;
+        tft.drawFastVLine(x, humGraphY, graphHeight, gridColor);
+    }
+
+    snprintf(label, sizeof(label), "%.0f%%", humMax);
+    drawText(label, 2, humGraphY - 5, TERMINAL_GREEN);
+    snprintf(label, sizeof(label), "%.0f%%", (humMax + humMin) / 2);
+    drawText(label, 2, humGraphY + graphHeight / 2 - 5, TERMINAL_GREEN);
+    snprintf(label, sizeof(label), "%.0f%%", humMin);
+    drawText(label, 2, humGraphY + graphHeight - 5, TERMINAL_GREEN);
+
+    snprintf(label, sizeof(label), "%.0f%%", humData[(dataCount - 1) % numPoints]);
+    textWidth = getTextWidth(label);
+    drawText(label, graphWidth - textWidth - 2, humGraphY - 5, TERMINAL_GREEN);
+
+    for (int i = 0; i < dataCount - 1 && i < numPoints - 1; i++) {
+        float hum1 = humData[i];
+        float hum2 = humData[i + 1];
+        int x1 = 1 + (int)(i * xStep);
+        int x2 = 1 + (int)((i + 1) * xStep);
+        int y1 = humGraphY + graphHeight - (int)(map(hum1, humMin, humMax, 0, graphHeight));
+        int y2 = humGraphY + graphHeight - (int)(map(hum2, humMin, humMax, 0, graphHeight));
+        y1 = constrain(y1, humGraphY, humGraphY + graphHeight);
+        y2 = constrain(y2, humGraphY, humGraphY + graphHeight);
+        x1 = constrain(x1, 1, graphWidth);
+        x2 = constrain(x2, 1, graphWidth);
+        tft.drawLine(x1, y1, x2, y2, TERMINAL_GREEN);
+    }
+
+    if (digitalRead(BUTTON_SELECT) == LOW) {
+        firstRun = true;
+    }
 }
 
 void handleButtonPress(int button)
