@@ -10,12 +10,12 @@
 #include <Fonts/FreeMono9pt7b.h>
 #include <DHT.h>
 
-#define TFT_CS   14
-#define TFT_DC   27
-#define TFT_RST  33
+#define TFT_CS 14
+#define TFT_DC 27
+#define TFT_RST 33
 #define TFT_MOSI 23
 #define TFT_MISO 19
-#define TFT_CLK  18
+#define TFT_CLK 18
 
 #define BATTERY_PIN 34
 #define VOLTAGE_DIVIDER 2.0
@@ -30,6 +30,8 @@
 #define BUTTON_RIGHT 12
 #define BUTTON_SELECT 15
 
+#define WIFI_SCAN_INTERVAL 10000
+
 #define TERMINAL_GREEN 0x07E0
 #define TERMINAL_AMBER 0xFD20
 #define TERMINAL_BLUE 0x001F
@@ -38,12 +40,33 @@
 #define BUTTON_BG 0x18C3
 #define BUTTON_SELECTED 0x2FE0
 
+#define MAX_VISIBLE_WIFI_ROWS 13
+#define WIFI_TABLE_Y_START 14
+#define WIFI_ROW_HEIGHT 18
+#define WIFI_VISIBLE_ROWS 13
+#define SSID_MAX_CHARS 10
+#define RSSI_BAR_MAX_WIDTH 70
+#define SSID_COLUMN_WIDTH 160
+#define SIGNAL_COLUMN_WIDTH 80
+#define ENC_COLUMN_WIDTH 50
+#define CH_COLUMN_WIDTH 30
+
 const int FONT_HEIGHT = 18;
 const int FONT_BASELINE = 14;
 const int LINE_SPACING = 22;
 const int LABEL_WIDTH = 90;
 const int BUTTON_HEIGHT = 25;
 const int BUTTON_SPACING = 5;
+
+struct WiFiNetworkInfo
+{
+    String ssid;
+    int32_t rssi;
+    uint8_t encryptionType;
+    uint8_t channel;
+    String bssid;
+    bool isHidden;
+};
 
 extern WiFiUDP ntpUDP;
 extern NTPClient timeClient;
@@ -71,5 +94,13 @@ extern String lastBattery;
 extern String lastHeap;
 extern String lastUptime;
 extern String lastWifi;
+
+extern String lastWifiScan;
+extern int wifiScanResultCount;
+extern int wifiScrollOffset;
+extern int selectedWifiButton;
+extern bool inWifiScreen;
+extern bool inWifiScanScreen;
+extern WiFiNetworkInfo wifiNetworks[20];
 
 #endif

@@ -30,7 +30,6 @@ int calculateBatteryPercentage(float voltage)
     {
         return 0;
     }
-    
     int percentage = map(voltage * 100, MIN_BATTERY_VOLTAGE * 100, MAX_BATTERY_VOLTAGE * 100, 0, 100);
     return percentage;
 }
@@ -59,7 +58,6 @@ void readDHTData()
 {
     float newTemp = dht.readTemperature();
     float newHumidity = dht.readHumidity();
-    
     if (!isnan(newTemp))
     {
         temperature = newTemp;
@@ -91,7 +89,6 @@ void printDebugInfo()
     Serial.print("V (");
     Serial.print(batteryPercentage);
     Serial.println("%)");
-    
     Serial.print("Temperature: ");
     Serial.print(temperature, 1);
     Serial.print("C, Humidity: ");
