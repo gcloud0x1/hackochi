@@ -4,6 +4,7 @@
 #include "config.h"
 #include "sensors.h"
 #include "networks.h"
+#include <Arduino.h>
 
 int moveMacTextUpSukiCriesHard = 8;
 
@@ -24,7 +25,8 @@ void drawMainScreen();
 void showTemperatureScreen();
 void showHumidityScreen();
 void showGraphScreen();
-void handleButtonPress(int button);
+void handleEncoderRotation(int direction);
+void handleEncoderButton();
 void updateDisplay();
 void showWifiScreen();
 void showWifiScanScreen();
@@ -35,6 +37,11 @@ void drawWifiTable();
 void drawScrollIndicators();
 void drawControlsText();
 void updateWifiScreen();
+void showWaterfallScreen();
+void drawWaterfallHeader();
+void drawWaterfallGraph(int x, int y, int width, int height);
+void drawWaterfallButtons();
+void updateWaterfallScreen();
 
 void setCurrentFont()
 {
@@ -161,7 +168,7 @@ void drawButtons()
 void drawTerminalHeader()
 {
     tft.fillRect(0, 0, tft.width(), 30, TERMINAL_HEADER);
-    const char* title = "HackOchi v0.7";
+    const char* title = "HackOchi v0.8";
     int textWidth = getTextWidth(title);
     drawText(title, (tft.width() - textWidth) / 2, 8, ILI9341_WHITE);
 }
@@ -184,6 +191,7 @@ void drawMainScreen()
     inMainScreen = true;
     inWifiScreen = false;
     inWifiScanScreen = false;
+    inWaterfallScreen = false;
 }
 
 void showTemperatureScreen()
@@ -191,6 +199,7 @@ void showTemperatureScreen()
     inMainScreen = false;
     inWifiScreen = false;
     inWifiScanScreen = false;
+    inWaterfallScreen = false;
     tft.fillScreen(TERMINAL_BG);
     drawTerminalHeader();
     drawText("TEMPERATURE DETAILS", 40, 40, TERMINAL_AMBER);
@@ -212,6 +221,7 @@ void showHumidityScreen()
     inMainScreen = false;
     inWifiScreen = false;
     inWifiScanScreen = false;
+    inWaterfallScreen = false;
     tft.fillScreen(TERMINAL_BG);
     drawTerminalHeader();
     drawText("HUMIDITY DETAILS", 40, 40, TERMINAL_BLUE);
@@ -236,6 +246,173 @@ void showGraphScreen()
     static float tempData[30] = {0};
     static float humData[30] = {0};
     static int dataCount = 0;
+    const int graphWidth = tft.width() - 2;
+    const int graphHeight = (tft.height() - 30) / 2 - 2;
+    const int tempGraphY = 30 + 1;
+    const int humGraphY = 30 + graphHeight + 3;
+    const uint16_t gridColor = 0x0420;
+
+    if (firstRun)
+    {
+        inMainScreen = false;
+        inWifiScreen = false;
+        inWifiScanScreen = false;
+        inWaterfallScreen = false;
+        tft.fillScreen(TERMINAL_BG);
+        drawTerminalHeader();
+        for (int i = 0; i < numPoints; i++)
+        {
+            tempData[i] = 25.0;
+            humData[i] = 50.0;
+        }
+        readDHTData();
+        if (!isnan(temperature) && temperature >= 0 && temperature <= 100)
+        {
+            tempData[0] = temperature;
+        }
+        if (!isnan(humidity) && humidity >= 0 && humidity <= 100)
+        {
+            humData[0] = humidity;
+        }
+        dataCount = 1;
+        firstRun = false;
+    }
+
+    if (millis() - lastUpdate >= 3000)
+    {
+        readDHTData();
+        float newTemp = temperature;
+        float newHum = humidity;
+        if (isnan(newTemp) || newTemp < 0 || newTemp > 100)
+        {
+            newTemp = tempData[(dataCount - 1) % numPoints];
+        }
+        if (isnan(newHum) || newHum < 0 || newHum > 100)
+        {
+            newHum = humData[(dataCount - 1) % numPoints];
+        }
+        if (dataCount < numPoints)
+        {
+            tempData[dataCount] = newTemp;
+            humData[dataCount] = newHum;
+            dataCount++;
+        }
+        else
+        {
+            for (int i = 0; i < numPoints - 1; i++)
+            {
+                tempData[i] = tempData[i + 1];
+                humData[i] = humData[i + 1];
+            }
+            tempData[numPoints - 1] = newTemp;
+            humData[numPoints - 1] = newHum;
+        }
+        lastUpdate = millis();
+    }
+    clearArea(1, tempGraphY, graphWidth, graphHeight);
+    clearArea(1, humGraphY, graphWidth, graphHeight);
+    float tempMin = tempData[0];
+    float tempMax = tempData[0];
+    for (int i = 1; i < dataCount && i < numPoints; i++)
+    {
+        if (tempData[i] < tempMin) tempMin = tempData[i];
+        if (tempData[i] > tempMax) tempMax = tempData[i];
+    }
+    tempMin -= 5.0;
+    tempMax += 5.0;
+    if (tempMax - tempMin < 10.0)
+    {
+        tempMax = tempMin + 10.0;
+    }
+    tft.drawFastHLine(0, tempGraphY - 1, tft.width(), TERMINAL_GREEN);
+    tft.drawFastHLine(0, tempGraphY + graphHeight, tft.width(), TERMINAL_GREEN);
+    tft.drawFastVLine(0, tempGraphY - 1, graphHeight + 2, TERMINAL_GREEN);
+    tft.drawFastVLine(tft.width() - 1, tempGraphY - 1, graphHeight + 2, TERMINAL_GREEN);
+    for (int i = 1; i <= 3; i++)
+    {
+        int y = tempGraphY + (graphHeight * i) / 4;
+        tft.drawFastHLine(1, y, graphWidth, gridColor);
+    }
+    for (int i = 1; i <= 4; i++)
+    {
+        int x = 1 + (graphWidth * i) / 5;
+        tft.drawFastVLine(x, tempGraphY, graphHeight, gridColor);
+    }
+    char label[10];
+    snprintf(label, sizeof(label), "%.0fC", tempMax);
+    drawText(label, 2, tempGraphY - 5, TERMINAL_GREEN);
+    snprintf(label, sizeof(label), "%.0fC", (tempMax + tempMin) / 2);
+    drawText(label, 2, tempGraphY + graphHeight / 2 - 5, TERMINAL_GREEN);
+    snprintf(label, sizeof(label), "%.0fC", tempMin);
+    drawText(label, 2, tempGraphY + graphHeight - 5, TERMINAL_GREEN);
+    snprintf(label, sizeof(label), "%.1fC", tempData[(dataCount - 1) % numPoints]);
+    int textWidth = getTextWidth(label);
+    drawText(label, graphWidth - textWidth - 2, tempGraphY - 5, TERMINAL_GREEN);
+    float xStep = (float)graphWidth / (numPoints - 1);
+    for (int i = 0; i < dataCount - 1 && i < numPoints - 1; i++)
+    {
+        float temp1 = tempData[i];
+        float temp2 = tempData[i + 1];
+        int x1 = 1 + (int)(i * xStep);
+        int x2 = 1 + (int)((i + 1) * xStep);
+        int y1 = tempGraphY + graphHeight - (int)(map(temp1 * 10, tempMin * 10, tempMax * 10, 0, graphHeight));
+        int y2 = tempGraphY + graphHeight - (int)(map(temp2 * 10, tempMin * 10, tempMax * 10, 0, graphHeight));
+        y1 = constrain(y1, tempGraphY, tempGraphY + graphHeight);
+        y2 = constrain(y2, tempGraphY, tempGraphY + graphHeight);
+        x1 = constrain(x1, 1, graphWidth);
+        x2 = constrain(x2, 1, graphWidth);
+        tft.drawLine(x1, y1, x2, y2, TERMINAL_GREEN);
+    }
+    float humMin = humData[0];
+    float humMax = humData[0];
+    for (int i = 1; i < dataCount && i < numPoints; i++)
+    {
+        if (humData[i] < humMin) humMin = humData[i];
+        if (humData[i] > humMax) humMax = humData[i];
+    }
+    humMin -= 10.0;
+    humMax += 10.0;
+    if (humMax - humMin < 20.0)
+    {
+        humMax = humMin + 20.0;
+    }
+    tft.drawFastHLine(0, humGraphY - 1, tft.width(), TERMINAL_GREEN);
+    tft.drawFastHLine(0, humGraphY + graphHeight, tft.width(), TERMINAL_GREEN);
+    tft.drawFastVLine(0, humGraphY - 1, graphHeight + 2, TERMINAL_GREEN);
+    tft.drawFastVLine(tft.width() - 1, humGraphY - 1, graphHeight + 2, TERMINAL_GREEN);
+    for (int i = 1; i <= 3; i++)
+    {
+        int y = humGraphY + (graphHeight * i) / 4;
+        tft.drawFastHLine(1, y, graphWidth, gridColor);
+    }
+    for (int i = 1; i <= 4; i++)
+    {
+        int x = 1 + (graphWidth * i) / 5;
+        tft.drawFastVLine(x, humGraphY, graphHeight, gridColor);
+    }
+    snprintf(label, sizeof(label), "%.0f%%", humMax);
+    drawText(label, 2, humGraphY - 5, TERMINAL_GREEN);
+    snprintf(label, sizeof(label), "%.0f%%", (humMax + humMin) / 2);
+    drawText(label, 2, humGraphY + graphHeight / 2 - 5, TERMINAL_GREEN);
+    snprintf(label, sizeof(label), "%.0f%%", humMin);
+    drawText(label, 2, humGraphY + graphHeight - 5, TERMINAL_GREEN);
+    snprintf(label, sizeof(label), "%.0f%%", humData[(dataCount - 1) % numPoints]);
+    textWidth = getTextWidth(label);
+    drawText(label, graphWidth - textWidth - 2, humGraphY - 5, TERMINAL_GREEN);
+    for (int i = 0; i < dataCount - 1 && i < numPoints - 1; i++)
+    {
+        float hum1 = humData[i];
+        float hum2 = humData[i + 1];
+        int x1 = 1 + (int)(i * xStep);
+        int x2 = 1 + (int)((i + 1) * xStep);
+        int y1 = humGraphY + graphHeight - (int)(map(hum1, humMin, humMax, 0, graphHeight));
+        int y2 = humGraphY + graphHeight - (int)(map(hum2, humMin, humMax, 0, graphHeight));
+        y1 = constrain(y1, humGraphY, humGraphY + graphHeight);
+        y2 = constrain(y2, humGraphY, humGraphY + graphHeight);
+        x1 = constrain(x1, 1, graphWidth);
+        x2 = constrain(x2, 1, graphWidth);
+        tft.drawLine(x1, y1, x2, y2, TERMINAL_GREEN);
+    }
 }
 
 void showWifiScreen()
@@ -243,6 +420,7 @@ void showWifiScreen()
     inMainScreen = false;
     inWifiScreen = true;
     inWifiScanScreen = false;
+    inWaterfallScreen = false;
     tft.fillScreen(TERMINAL_BG);
     drawTerminalHeader();
     if (WiFi.status() != WL_CONNECTED)
@@ -317,7 +495,7 @@ void showWifiScreen()
         int lockPercent = map(cappedRssi, -100, -30, 0, 100);
         char lockStr[16]; snprintf(lockStr, sizeof(lockStr), "%d%%", lockPercent);
         drawSmallText(lockStr, bottomRightX + 60, bottomRightY + 45);
-    } 
+    }
     else
     {
         drawText("WiFi Disconnected", 80, 120, ILI9341_RED);
@@ -329,6 +507,7 @@ void showWifiScanScreen()
 {
     inWifiScreen = false;
     inWifiScanScreen = true;
+    inWaterfallScreen = false;
     if (wifiScanResultCount == 0)
     {
         scanNetworks();
@@ -430,10 +609,7 @@ void drawScanningIndicator(const char* text, int x, int y, int durationMs)
 
 void updateWifiScreen()
 {
-    if (!inWifiScreen)
-    {
-        return;
-    }
+    if (!inWifiScreen) return;
     static unsigned long lastWifiUpdate = 0;
     static const unsigned long WIFI_UPDATE_INTERVAL = 5000;
     if (millis() - lastWifiUpdate > WIFI_UPDATE_INTERVAL)
@@ -500,82 +676,131 @@ void updateWifiScreen()
     }
 }
 
-void handleButtonPress(int button)
+void showWaterfallScreen()
 {
-    if (millis() - lastButtonPress < buttonDebounce)
+    inMainScreen = false;
+    inWifiScreen = false;
+    inWifiScanScreen = false;
+    inWaterfallScreen = true;
+    maxPps = 0;
+    setPromiscuousMode(true, currentChannel);
+    tft.fillScreen(TERMINAL_BG);
+    drawWaterfallHeader();
+    drawWaterfallGraph(10, 15, tft.width() - 20, 180);
+    drawWaterfallButtons();
+}
+
+void drawWaterfallHeader()
+{
+    int headerY = 6;
+    int screenWidth = tft.width();
+    clearArea(0, 0, screenWidth, 14);
+    char channelInfo[25];
+    int frequency = 2412 + ((currentChannel - 1) * 5);
+    snprintf(channelInfo, sizeof(channelInfo), "CH %d (%d MHz)", currentChannel, frequency);
+    int channelWidth = getSmallTextWidth(channelInfo);
+    drawSmallText(channelInfo, max(2, 5 - channelWidth / 2), headerY, TERMINAL_AMBER);
+    int pps = 0;
+    if (currentChannel >= 1 && currentChannel <= NUM_CHANNELS)
     {
-        return;
+        pps = packetHistory[currentChannel-1][0];
     }
-    lastButtonPress = millis();
+    if (pps > maxPps)
+    {
+        maxPps = pps;
+    }
+    char stats[25];
+    snprintf(stats, sizeof(stats), "PPS:%d Max:%d", pps, maxPps);
+    int statsWidth = getSmallTextWidth(stats);
+    drawSmallText(stats, screenWidth - statsWidth - 2, headerY, TERMINAL_GREEN);
+}
+
+void drawWaterfallGraph(int x, int y, int width, int height)
+{
+    clearArea(x, y, width, height + 15);
+    int centerX = x + (width / 2);
+    tft.drawFastVLine(centerX, y, height, TERMINAL_GREEN);
+    int singleDigitWidth = getSmallTextWidth("0");
+    int doubleDigitWidth = getSmallTextWidth("50");
+    drawSmallText("0", centerX - (singleDigitWidth / 2) - 3, y + height + 4, TERMINAL_GREEN);
+    for (int i = 1; i <= 5; i++)
+    {
+        int offset = (width / 2) * i / 5;
+        char label[4];
+        snprintf(label, sizeof(label), "%d", i * 10);
+        int rightX = centerX + offset - (doubleDigitWidth / 2) - 2;
+        drawSmallText(label, rightX, y + height + 4, TERMINAL_GREEN);
+        int leftX = centerX - offset - (doubleDigitWidth / 2) - 2;
+        drawSmallText(label, leftX, y + height + 4, TERMINAL_GREEN);
+    }
+    uint16_t noiseColor = tft.color565(0, 0, 30);
+    for (int timeSlot = 0; timeSlot < MAX_PACKET_HISTORY; timeSlot++)
+    {
+        int lineY = y + timeSlot;
+        tft.drawFastHLine(x, lineY, width, noiseColor);
+        int packets = packetHistory[currentChannel - 1][timeSlot];
+        if (packets > 0)
+        {
+            int halfLineLength = map(packets, 0, 50, 0, width / 2);
+            halfLineLength = constrain(halfLineLength, 0, width / 2);
+            int intensity = map(packets, 0, 50, 0, 255);
+            intensity = constrain(intensity, 0, 255);
+            uint16_t color;
+            if (intensity < 64)
+            {
+                color = tft.color565(0, 0, map(intensity, 0, 63, 30, 255));
+            }
+            else if (intensity < 128)
+            {
+                color = tft.color565(0, map(intensity, 64, 127, 0, 255), 255);
+            }
+            else if (intensity < 192)
+            {
+                color = tft.color565(map(intensity, 128, 191, 0, 255), 255, map(intensity, 128, 191, 255, 0));
+            }
+            else
+            {
+                color = tft.color565(255, 255, map(intensity, 192, 255, 0, 255));
+            }
+            tft.drawFastHLine(centerX - halfLineLength, lineY, halfLineLength * 2, color);
+        }
+    }
+}
+
+void drawWaterfallButtons()
+{
+    int buttonY = tft.height() - BUTTON_HEIGHT - 3;
+    int buttonWidth = (tft.width() - 20 - BUTTON_SPACING * 3) / 4;
+    clearArea(8, buttonY - 2, tft.width() - 16, BUTTON_HEIGHT + 4);
+    drawButton("Scan", 10, buttonY, buttonWidth, selectedWaterfallButton == 0);
+    drawButton("CH-", 10 + (buttonWidth + BUTTON_SPACING), buttonY, buttonWidth, selectedWaterfallButton == 1);
+    drawButton("CH+", 10 + 2*(buttonWidth + BUTTON_SPACING), buttonY, buttonWidth, selectedWaterfallButton == 2);
+    drawButton("Back", 10 + 3*(buttonWidth + BUTTON_SPACING), buttonY, buttonWidth, selectedWaterfallButton == 3);
+}
+
+void updateWaterfallScreen()
+{
+    if (!inWaterfallScreen) return;
+    drawWaterfallHeader();
+    drawWaterfallGraph(10, 15, tft.width() - 20, 180);
+}
+
+void handleEncoderRotation(int direction)
+{
+    if (millis() - lastEncoderPress < encoderDebounce) return;
     if (inMainScreen)
     {
-        if (button == BUTTON_LEFT)
-        {
-            selectedButton = (selectedButton - 1 + 4) % 4;
-            drawButtons();
-        }
-        else if (button == BUTTON_RIGHT)
-        {
-            selectedButton = (selectedButton + 1) % 4;
-            drawButtons();
-        }
-        else if (button == BUTTON_SELECT)
-        {
-            switch (selectedButton)
-            {
-                case 0:
-                    showTemperatureScreen();
-                    break;
-                case 1:
-                    showHumidityScreen();
-                    break;
-                case 2:
-                    showGraphScreen();
-                    break;
-                case 3:
-                    showWifiScreen();
-                    break;
-            }
-        }
+        selectedButton = (selectedButton + direction + 4) % 4;
+        drawButtons();
     }
     else if (inWifiScreen)
     {
-        if (button == BUTTON_LEFT)
-        {
-            selectedWifiButton = (selectedWifiButton - 1 + 3) % 3;
-            drawWifiButtons();
-        }
-        else if (button == BUTTON_RIGHT)
-        {
-            selectedWifiButton = (selectedWifiButton + 1) % 3;
-            drawWifiButtons();
-        }
-        else if (button == BUTTON_SELECT)
-        {
-            switch (selectedWifiButton)
-            {
-                case 0:
-                    showWifiScanScreen();
-                    break;
-                case 1:
-                    break;
-                case 2:
-                    drawMainScreen();
-                    break;
-            }
-        }
+        selectedWifiButton = (selectedWifiButton + direction + 3) % 3;
+        drawWifiButtons();
     }
     else if (inWifiScanScreen)
     {
-        if (button == BUTTON_LEFT)
-        {
-            if (wifiScrollOffset > 0)
-            {
-                wifiScrollOffset--;
-                updateWifiScanScreen();
-            }
-        }
-        else if (button == BUTTON_RIGHT)
+        if (direction > 0)
         {
             int maxOffset = max(0, wifiScanResultCount - MAX_VISIBLE_WIFI_ROWS);
             if (wifiScrollOffset < maxOffset)
@@ -584,37 +809,98 @@ void handleButtonPress(int button)
                 updateWifiScanScreen();
             }
         }
-        else if (button == BUTTON_SELECT)
+        else
         {
-            inWifiScanScreen = false;
-            showWifiScreen();
+            if (wifiScrollOffset > 0)
+            {
+                wifiScrollOffset--;
+                updateWifiScanScreen();
+            }
+        }
+    }
+    else if (inWaterfallScreen)
+    {
+        selectedWaterfallButton = (selectedWaterfallButton + direction + 4) % 4;
+        drawWaterfallButtons();
+    }
+}
+
+void handleEncoderButton()
+{
+    if (millis() - lastEncoderPress < encoderDebounce) return;
+    lastEncoderPress = millis();
+    if (inMainScreen)
+    {
+        switch (selectedButton)
+        {
+            case 0: showTemperatureScreen(); break;
+            case 1: showHumidityScreen(); break;
+            case 2: showGraphScreen(); break;
+            case 3: showWifiScreen(); break;
+        }
+    }
+    else if (inWifiScreen)
+    {
+        switch (selectedWifiButton)
+        {
+            case 0: showWifiScanScreen(); break;
+            case 1: showWaterfallScreen(); break;
+            case 2: drawMainScreen(); break;
+        }
+    }
+    else if (inWifiScanScreen)
+    {
+        inWifiScanScreen = false;
+        showWifiScreen();
+    }
+    else if (inWaterfallScreen)
+    {
+        switch (selectedWaterfallButton)
+        {
+            case 0:
+                setPromiscuousMode(false);
+                scanNetworks();
+                maxPps = 0;
+                setPromiscuousMode(true, currentChannel);
+                break;
+            case 1:
+                currentChannel = (currentChannel - 2 + NUM_CHANNELS) % NUM_CHANNELS + 1;
+                maxPps = 0;
+                setPromiscuousMode(true, currentChannel);
+                drawWaterfallHeader();
+                break;
+            case 2:
+                currentChannel = (currentChannel % NUM_CHANNELS) + 1;
+                maxPps = 0;
+                setPromiscuousMode(true, currentChannel);
+                drawWaterfallHeader();
+                break;
+            case 3:
+                setPromiscuousMode(false);
+                inWaterfallScreen = false;
+                showWifiScreen();
+                break;
         }
     }
     else
     {
-        if (button == BUTTON_SELECT)
-        {
-            drawMainScreen();
-            lastSensorRead = 0;
-            lastBatteryCheck = 0;
-            lastTime = "";
-            lastTemp = "";
-            lastHumidity = "";
-            lastWifi = "";
-            lastBattery = "";
-            lastHeap = "";
-            lastUptime = "";
-            updateDisplay();
-        }
+        drawMainScreen();
+        lastSensorRead = 0;
+        lastBatteryCheck = 0;
+        lastTime = "";
+        lastTemp = "";
+        lastHumidity = "";
+        lastWifi = "";
+        lastBattery = "";
+        lastHeap = "";
+        lastUptime = "";
+        updateDisplay();
     }
 }
 
 void updateDisplay()
 {
-    if (!inMainScreen)
-    {
-        return;
-    }
+    if (!inMainScreen) return;
     if (WiFi.status() == WL_CONNECTED)
     {
         timeClient.update();

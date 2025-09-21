@@ -26,9 +26,10 @@
 #define DHT_PIN 4
 #define DHT_TYPE DHT11
 
-#define BUTTON_LEFT 13
-#define BUTTON_RIGHT 12
-#define BUTTON_SELECT 15
+// Rotary Encoder Pins (using safe GPIO pins)
+#define ENCODER_CLK 32    // Safe GPIO
+#define ENCODER_DT 34     // Safe GPIO  
+#define ENCODER_SW 21     // Safe GPIO
 
 #define WIFI_SCAN_INTERVAL 10000
 
@@ -50,6 +51,9 @@
 #define SIGNAL_COLUMN_WIDTH 80
 #define ENC_COLUMN_WIDTH 50
 #define CH_COLUMN_WIDTH 30
+
+#define MAX_PACKET_HISTORY 180
+#define NUM_CHANNELS 14
 
 const int FONT_HEIGHT = 18;
 const int FONT_BASELINE = 14;
@@ -76,9 +80,9 @@ extern DHT dht;
 extern unsigned long previousMillis;
 extern unsigned long lastBatteryCheck;
 extern unsigned long lastSensorRead;
-extern unsigned long lastButtonPress;
+extern unsigned long lastEncoderPress;
 extern const long interval;
-extern const long buttonDebounce;
+extern const long encoderDebounce;
 
 extern float batteryVoltage;
 extern int batteryPercentage;
@@ -102,5 +106,25 @@ extern int selectedWifiButton;
 extern bool inWifiScreen;
 extern bool inWifiScanScreen;
 extern WiFiNetworkInfo wifiNetworks[20];
+
+extern int packetHistory[NUM_CHANNELS][MAX_PACKET_HISTORY];
+extern int currentChannel;
+extern int selectedWaterfallButton;
+extern bool inWaterfallScreen;
+
+extern int encoderPos;
+extern int lastEncoderPos;
+extern bool encoderButtonPressed;
+extern int lastEncoderCLK;
+extern bool lastButtonState;
+
+extern uint32_t packetCount;
+extern uint32_t lastCount;
+extern uint32_t maxPps;
+extern unsigned long lastPacketTime;
+extern int monitorChannel;
+extern bool promiscuousModeActive;
+
+void setPromiscuousMode(bool enable, int channel = -1);
 
 #endif

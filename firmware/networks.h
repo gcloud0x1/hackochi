@@ -7,6 +7,7 @@
 void setupNetwork();
 void scanNetworks();
 String getEncryptionTypeString(uint8_t encryptionType);
+void updatePacketWaterfall();
 
 void setupNetwork()
 {
@@ -18,15 +19,42 @@ void setupNetwork()
     }
 }
 
+void updatePacketWaterfall()
+{
+    for (int ch = 0; ch < NUM_CHANNELS; ch++)
+    {
+        for (int i = MAX_PACKET_HISTORY - 1; i > 0; i--)
+        {
+            packetHistory[ch][i] = packetHistory[ch][i-1];
+        }
+        packetHistory[ch][0] = 0;
+    }
+
+    if (promiscuousModeActive)
+    {
+        uint32_t currentPackets = packetCount;
+        uint32_t pps = currentPackets - lastCount;
+
+        if (monitorChannel >= 1 && monitorChannel <= NUM_CHANNELS)
+        {
+            packetHistory[monitorChannel - 1][0] = pps;
+        }
+
+        Serial.printf("REAL PACKETS - Channel %d: %d PPS | Total since start: %u\n",
+                     monitorChannel, pps, currentPackets);
+
+        lastCount = currentPackets;
+    }
+}
+
 void scanNetworks()
 {
     wifiScanResultCount = 0;
-    WiFi.mode(WIFI_STA);
-    WiFi.disconnect();
-    delay(100);
+
     Serial.println("Starting WiFi scan...");
-    int foundNetworks = WiFi.scanNetworks(false, true);
+    int foundNetworks = WiFi.scanNetworks();
     Serial.printf("WiFi.scanNetworks returned: %d\n", foundNetworks);
+
     if (foundNetworks > 0)
     {
         wifiScanResultCount = min(foundNetworks, 20);
@@ -38,34 +66,12 @@ void scanNetworks()
             wifiNetworks[i].channel = WiFi.channel(i);
             wifiNetworks[i].bssid = WiFi.BSSIDstr(i);
             wifiNetworks[i].isHidden = (WiFi.SSID(i).length() == 0);
-            Serial.printf("Network %d: SSID='%s', RSSI=%d, Channel=%d, Encryption=%s, BSSID=%s, Hidden=%s\n",
-                          i, wifiNetworks[i].ssid.c_str(), wifiNetworks[i].rssi, wifiNetworks[i].channel,
-                          getEncryptionTypeString(wifiNetworks[i].encryptionType).c_str(),
-                          wifiNetworks[i].bssid.c_str(), wifiNetworks[i].isHidden ? "Yes" : "No");
         }
-    }
-    else if (foundNetworks == 0)
-    {
-        Serial.println("No networks found (0 returned)");
-        wifiScanResultCount = 0;
     }
     else
     {
-        Serial.printf("Scan failed with error code: %d\n", foundNetworks);
-        if (foundNetworks == -1)
-        {
-            Serial.println("Error: Scan not triggered (radio busy or off)");
-        }
-        else if (foundNetworks == -2)
-        {
-            Serial.println("Error: Scan failed to start (possible hardware or mode issue)");
-        }
+        Serial.println("No networks found or scan failed.");
         wifiScanResultCount = 0;
-    }
-    if (WiFi.status() != WL_CONNECTED)
-    {
-        WiFi.begin(ssid, password);
-        Serial.println("Reconnecting to network...");
     }
 }
 

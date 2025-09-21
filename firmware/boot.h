@@ -8,7 +8,7 @@
 #include "credentials.h"
 
 void setupDisplay();
-void setupButtons();
+void setupEncoder();
 void runBootSequence();
 
 void setupDisplay()
@@ -19,11 +19,11 @@ void setupDisplay()
     tft.setTextWrap(false);
 }
 
-void setupButtons()
+void setupEncoder()
 {
-    pinMode(BUTTON_LEFT, INPUT_PULLUP);
-    pinMode(BUTTON_RIGHT, INPUT_PULLUP);
-    pinMode(BUTTON_SELECT, INPUT_PULLUP);
+    pinMode(ENCODER_CLK, INPUT_PULLUP);
+    pinMode(ENCODER_DT, INPUT_PULLUP);
+    pinMode(ENCODER_SW, INPUT_PULLUP);
 }
 
 void runBootSequence()
