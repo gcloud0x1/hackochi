@@ -4,6 +4,7 @@
 #include "sensors.h"
 #include "networks.h"
 #include "boot.h"
+#include "bluetooth.h"
 #include <esp_wifi.h>
 #include <esp_wifi_types.h>
 
@@ -41,6 +42,15 @@ int selectedWifiButton = 0;
 bool inWifiScreen = false;
 bool inWifiScanScreen = false;
 WiFiNetworkInfo wifiNetworks[20];
+
+bool inBleScreen = false;
+bool inBleScanScreen = false;
+int selectedBleButton = 0;
+int bleScanResultCount = 0;
+int bleScrollOffset = 0;
+BLENetworkInfo bleNetworks[20];
+
+bool inGraphScreen = false;
 
 int packetHistory[NUM_CHANNELS][MAX_PACKET_HISTORY] = {0};
 int currentChannel = 6;
@@ -83,16 +93,24 @@ void setPromiscuousMode(bool enable, int channel)
         Serial.printf("Enabling promiscuous mode on channel %d\n", channel);
         promiscuousModeActive = true;
         monitorChannel = channel;
+
         esp_wifi_stop();
         esp_wifi_deinit();
+
         wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
         esp_wifi_init(&cfg);
+
         esp_wifi_set_storage(WIFI_STORAGE_RAM);
+
         esp_wifi_set_mode(WIFI_MODE_NULL);
+
         esp_wifi_start();
+
         esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
+        
         esp_wifi_set_promiscuous_rx_cb(&sniffer_callback);
         esp_wifi_set_promiscuous(true);
+
         packetCount = 0;
         lastCount = 0;
     }
@@ -100,14 +118,20 @@ void setPromiscuousMode(bool enable, int channel)
     {
         Serial.println("Disabling promiscuous mode and returning to STA mode");
         promiscuousModeActive = false;
+
         esp_wifi_set_promiscuous(false);
         esp_wifi_stop();
         esp_wifi_deinit();
+
         wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
         esp_wifi_init(&cfg);
+
         esp_wifi_set_storage(WIFI_STORAGE_RAM);
+
         esp_wifi_set_mode(WIFI_MODE_STA);
+
         esp_wifi_start();
+
         WiFi.begin(ssid, password);
     }
 }
@@ -134,6 +158,11 @@ void setup()
         Serial.printf("Test scan found %d networks. WiFi radio OK.\n", testScan);
     }
     WiFi.scanDelete();
+
+    #ifdef ENABLE_BLE
+      ble_init();
+    #endif
+
     setupSensors();
     setupDisplay();
     setupEncoder();
@@ -210,8 +239,8 @@ void loop()
     {
         if (currentMillis - previousMillis >= 100)
         {
-            previousMillis = currentMillis;
-            updateWifiScanScreen();
+             previousMillis = currentMillis;
+             updateWifiScanScreen();
         }
     }
     else if (inWaterfallScreen)
@@ -223,7 +252,10 @@ void loop()
             updateWaterfallScreen();
         }
     }
-    else if (!inWifiScreen)
+    else if (inBleScanScreen)
+    {
+    }
+    else if (inGraphScreen)
     {
         if (currentMillis - previousMillis >= 100)
         {

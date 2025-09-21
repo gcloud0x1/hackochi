@@ -4,6 +4,7 @@
 #include "config.h"
 #include "sensors.h"
 #include "networks.h"
+#include "bluetooth.h"
 #include <Arduino.h>
 
 int moveMacTextUpSukiCriesHard = 8;
@@ -42,6 +43,12 @@ void drawWaterfallHeader();
 void drawWaterfallGraph(int x, int y, int width, int height);
 void drawWaterfallButtons();
 void updateWaterfallScreen();
+void showBleScreen();
+void drawBleButtons();
+void showBleScanScreen();
+void drawBleTable();
+void showBleGraphScreen();
+void updateBleScanScreen();
 
 void setCurrentFont()
 {
@@ -146,18 +153,23 @@ void drawButton(const char* text, int x, int y, int width, bool selected)
 void drawButtons()
 {
     int buttonY = 40 + LINE_SPACING * 7 + 10;
-    int buttonWidth = (tft.width() - 20 - BUTTON_SPACING * 2) / 3;
+    int buttonWidth = (tft.width() - 20 - BUTTON_SPACING * 3) / 4;
     tft.fillRect(8, buttonY - 2, tft.width() - 16, BUTTON_HEIGHT + 4, TERMINAL_BG);
+
+    const char* buttonTexts[] = {"Temp", "Humi", "Graph", "WiFi", "BLE"};
+    int numButtons = 5;
+    int maxVisibleButtons = 4;
+    
     int startButton = 0;
-    if (selectedButton >= 3)
+    if (selectedButton >= maxVisibleButtons)
     {
-        startButton = 1;
+        startButton = selectedButton - (maxVisibleButtons - 1);
     }
-    const char* buttonTexts[] = {"Temp", "Humi", "Graph", "WiFi"};
-    for (int i = 0; i < 3; i++)
+
+    for (int i = 0; i < maxVisibleButtons; i++)
     {
         int buttonIndex = startButton + i;
-        if (buttonIndex < 4)
+        if (buttonIndex < numButtons)
         {
             int xPos = 10 + (buttonWidth + BUTTON_SPACING) * i;
             drawButton(buttonTexts[buttonIndex], xPos, buttonY, buttonWidth, selectedButton == buttonIndex);
@@ -168,7 +180,7 @@ void drawButtons()
 void drawTerminalHeader()
 {
     tft.fillRect(0, 0, tft.width(), 30, TERMINAL_HEADER);
-    const char* title = "HackOchi v0.8";
+    const char* title = "HackOchi v0.9";
     int textWidth = getTextWidth(title);
     drawText(title, (tft.width() - textWidth) / 2, 8, ILI9341_WHITE);
 }
@@ -192,6 +204,9 @@ void drawMainScreen()
     inWifiScreen = false;
     inWifiScanScreen = false;
     inWaterfallScreen = false;
+    inBleScreen = false;
+    inBleScanScreen = false;
+    inGraphScreen = false;
 }
 
 void showTemperatureScreen()
@@ -200,6 +215,9 @@ void showTemperatureScreen()
     inWifiScreen = false;
     inWifiScanScreen = false;
     inWaterfallScreen = false;
+    inBleScreen = false;
+    inBleScanScreen = false;
+    inGraphScreen = false;
     tft.fillScreen(TERMINAL_BG);
     drawTerminalHeader();
     drawText("TEMPERATURE DETAILS", 40, 40, TERMINAL_AMBER);
@@ -222,6 +240,9 @@ void showHumidityScreen()
     inWifiScreen = false;
     inWifiScanScreen = false;
     inWaterfallScreen = false;
+    inBleScreen = false;
+    inBleScanScreen = false;
+    inGraphScreen = false;
     tft.fillScreen(TERMINAL_BG);
     drawTerminalHeader();
     drawText("HUMIDITY DETAILS", 40, 40, TERMINAL_BLUE);
@@ -258,6 +279,9 @@ void showGraphScreen()
         inWifiScreen = false;
         inWifiScanScreen = false;
         inWaterfallScreen = false;
+        inBleScreen = false;
+        inBleScanScreen = false;
+        inGraphScreen = true;
         tft.fillScreen(TERMINAL_BG);
         drawTerminalHeader();
         for (int i = 0; i < numPoints; i++)
@@ -277,7 +301,6 @@ void showGraphScreen()
         dataCount = 1;
         firstRun = false;
     }
-
     if (millis() - lastUpdate >= 3000)
     {
         readDHTData();
@@ -421,6 +444,9 @@ void showWifiScreen()
     inWifiScreen = true;
     inWifiScanScreen = false;
     inWaterfallScreen = false;
+    inBleScreen = false;
+    inBleScanScreen = false;
+    inGraphScreen = false;
     tft.fillScreen(TERMINAL_BG);
     drawTerminalHeader();
     if (WiFi.status() != WL_CONNECTED)
@@ -508,6 +534,9 @@ void showWifiScanScreen()
     inWifiScreen = false;
     inWifiScanScreen = true;
     inWaterfallScreen = false;
+    inBleScreen = false;
+    inBleScanScreen = false;
+    inGraphScreen = false;
     if (wifiScanResultCount == 0)
     {
         scanNetworks();
@@ -682,6 +711,9 @@ void showWaterfallScreen()
     inWifiScreen = false;
     inWifiScanScreen = false;
     inWaterfallScreen = true;
+    inBleScreen = false;
+    inBleScanScreen = false;
+    inGraphScreen = false;
     maxPps = 0;
     setPromiscuousMode(true, currentChannel);
     tft.fillScreen(TERMINAL_BG);
@@ -785,19 +817,139 @@ void updateWaterfallScreen()
     drawWaterfallGraph(10, 15, tft.width() - 20, 180);
 }
 
+void showBleScreen()
+{
+    inMainScreen = false;
+    inWifiScreen = false;
+    inWifiScanScreen = false;
+    inWaterfallScreen = false;
+    inBleScreen = true;
+    inBleScanScreen = false;
+    inGraphScreen = false;
+    tft.fillScreen(TERMINAL_BG);
+    drawTerminalHeader();
+    drawText("Bluetooth LE", 80, 100, TERMINAL_BLUE);
+    drawBleButtons();
+}
+
+void drawBleButtons()
+{
+    int buttonY = tft.height() - BUTTON_HEIGHT - 10;
+    int buttonWidth = (tft.width() - 20 - BUTTON_SPACING * 2) / 3;
+    clearArea(8, buttonY - 2, tft.width() - 16, BUTTON_HEIGHT + 4);
+    drawButton("Scan", 10, buttonY, buttonWidth, selectedBleButton == 0);
+    drawButton("Graph", 10 + (buttonWidth + BUTTON_SPACING), buttonY, buttonWidth, selectedBleButton == 1);
+    drawButton("Back", 10 + 2 * (buttonWidth + BUTTON_SPACING), buttonY, buttonWidth, selectedBleButton == 2);
+}
+
+void showBleScanScreen()
+{
+    inBleScreen = false;
+    inBleScanScreen = true;
+    inGraphScreen = false;
+    if (bleScanResultCount == 0)
+    {
+        scanBLE();
+    }
+    tft.fillScreen(TERMINAL_BG);
+    drawSmallText("Name",   10,  8, TERMINAL_AMBER);
+    drawSmallText("Signal", 160, 8, TERMINAL_AMBER);
+    drawSmallText("Type",   230, 8, TERMINAL_AMBER);
+    drawSmallText("RSSI",   280, 8, TERMINAL_AMBER);
+    tft.drawFastHLine(0, 24, tft.width(), TERMINAL_GREEN);
+    clearArea(0, 28, tft.width(), tft.height() - 28);
+    drawBleTable();
+}
+
+void updateBleScanScreen()
+{
+    static unsigned long lastScan = 0;
+    if (millis() - lastScan > WIFI_SCAN_INTERVAL)
+    {
+        scanBLE();
+        lastScan = millis();
+        Serial.printf("Rescanned: %d BLE devices\n", bleScanResultCount);
+    }
+    clearArea(0, 28, tft.width(), tft.height() - 28);
+    drawBleTable();
+}
+
+void drawBleTable()
+{
+    int startRow = bleScrollOffset;
+    int endRow   = min(startRow + MAX_VISIBLE_WIFI_ROWS, bleScanResultCount);
+    int headerBottom = 28;
+    int rowSpacing   = 38;
+    int topPadding   = 6;
+    clearArea(0, headerBottom, tft.width(), tft.height() - headerBottom);
+    for (int i = startRow; i < endRow; i++)
+    {
+        int rowIndex = i - startRow;
+        int y = headerBottom + topPadding + (rowIndex * rowSpacing);
+        BLENetworkInfo dev = bleNetworks[i];
+        String nameDisplay = dev.name.substring(0, SSID_MAX_CHARS);
+        if (nameDisplay.length() == 0)
+        {
+            nameDisplay = "[Hidden]";
+        }
+        drawSmallText(nameDisplay.c_str(), 10, y, dev.name.length() == 0 ? TERMINAL_AMBER : TERMINAL_GREEN);
+        String addressDisplay = dev.address;
+        int macTextWidth  = getTinyTextWidth(addressDisplay.c_str());
+        int macBoxHeight  = 14;
+        int macBoxWidth   = macTextWidth + 10;
+        int macX = 10;
+        int macY = y + 12;
+        tft.fillRoundRect(macX, macY, macBoxWidth, macBoxHeight, 6, TERMINAL_BG);
+        tft.drawRoundRect(macX, macY, macBoxWidth, macBoxHeight, 6, TERMINAL_BLUE);
+        int textX = macX + (macBoxWidth - macTextWidth) / 2;
+        int textY = macY + (macBoxHeight / 2) - moveMacTextUpSukiCriesHard;
+        drawTinyText(addressDisplay.c_str(), textX, textY, TERMINAL_BLUE);
+        int32_t cappedRssi   = dev.rssi > -100 ? dev.rssi : -100;
+        int rssiStrength     = map(cappedRssi, -100, -30, 0, RSSI_BAR_MAX_WIDTH);
+        uint16_t barColor    = (dev.rssi > -60) ? TERMINAL_GREEN : (dev.rssi > -80) ? TERMINAL_AMBER : ILI9341_RED;
+        tft.fillRect(160, y, RSSI_BAR_MAX_WIDTH, 7, TERMINAL_BG);
+        tft.fillRect(160, y, rssiStrength, 7, barColor);
+        tft.drawRect(160, y, RSSI_BAR_MAX_WIDTH, 7, TERMINAL_GREEN);
+        drawSmallText("BLE", 240, y, TERMINAL_BLUE);
+        char rssiStr[8];
+        snprintf(rssiStr, sizeof(rssiStr), "%d", dev.rssi);
+        drawSmallText(rssiStr, 280, y, TERMINAL_GREEN);
+    }
+    if (bleScanResultCount == 0)
+    {
+        drawSmallText("No networks found", 80, 100, ILI9341_RED);
+    }
+}
+
+void showBleGraphScreen()
+{
+    inMainScreen = false;
+    inWifiScreen = false;
+    inWifiScanScreen = false;
+    inWaterfallScreen = false;
+    inBleScreen = false;
+    inBleScanScreen = false;
+    inGraphScreen = false;
+    tft.fillScreen(TERMINAL_BG);
+    drawTerminalHeader();
+    drawText("BLE Graph", 90, 80, TERMINAL_AMBER);
+    drawText("Coming Soon!", 75, 120);
+    drawText("Press SELECT to return", 20, 220, TERMINAL_AMBER);
+}
+
 void handleEncoderRotation(int direction)
 {
     if (millis() - lastEncoderPress < encoderDebounce) return;
     if (inMainScreen)
     {
-        selectedButton = (selectedButton + direction + 4) % 4;
+        selectedButton = (selectedButton + direction + 5) % 5;
         drawButtons();
-    }
+    } 
     else if (inWifiScreen)
     {
         selectedWifiButton = (selectedWifiButton + direction + 3) % 3;
         drawWifiButtons();
-    }
+    } 
     else if (inWifiScanScreen)
     {
         if (direction > 0)
@@ -823,6 +975,31 @@ void handleEncoderRotation(int direction)
         selectedWaterfallButton = (selectedWaterfallButton + direction + 4) % 4;
         drawWaterfallButtons();
     }
+    else if (inBleScreen)
+    {
+        selectedBleButton = (selectedBleButton + direction + 3) % 3;
+        drawBleButtons();
+    }
+    else if (inBleScanScreen)
+    {
+        if (direction > 0)
+        {
+            int maxOffset = max(0, bleScanResultCount - MAX_VISIBLE_WIFI_ROWS);
+            if (bleScrollOffset < maxOffset)
+            {
+                bleScrollOffset++;
+                drawBleTable();
+            }
+        }
+        else
+        {
+            if (bleScrollOffset > 0)
+            {
+                bleScrollOffset--;
+                drawBleTable();
+            }
+        }
+    }
 }
 
 void handleEncoderButton()
@@ -837,8 +1014,9 @@ void handleEncoderButton()
             case 1: showHumidityScreen(); break;
             case 2: showGraphScreen(); break;
             case 3: showWifiScreen(); break;
+            case 4: showBleScreen(); break;
         }
-    }
+    } 
     else if (inWifiScreen)
     {
         switch (selectedWifiButton)
@@ -847,12 +1025,12 @@ void handleEncoderButton()
             case 1: showWaterfallScreen(); break;
             case 2: drawMainScreen(); break;
         }
-    }
+    } 
     else if (inWifiScanScreen)
     {
         inWifiScanScreen = false;
         showWifiScreen();
-    }
+    } 
     else if (inWaterfallScreen)
     {
         switch (selectedWaterfallButton)
@@ -881,6 +1059,19 @@ void handleEncoderButton()
                 showWifiScreen();
                 break;
         }
+    }
+    else if (inBleScreen)
+    {
+        switch(selectedBleButton)
+        {
+            case 0: showBleScanScreen(); break;
+            case 1: showBleGraphScreen(); break;
+            case 2: drawMainScreen(); break;
+        }
+    }
+    else if (inBleScanScreen)
+    {
+        showBleScreen();
     }
     else
     {

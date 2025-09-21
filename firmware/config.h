@@ -10,6 +10,9 @@
 #include <Fonts/FreeMono9pt7b.h>
 #include <DHT.h>
 
+#define ENABLE_BLE
+#include <BLEDevice.h>
+
 #define TFT_CS 14
 #define TFT_DC 27
 #define TFT_RST 33
@@ -26,10 +29,9 @@
 #define DHT_PIN 4
 #define DHT_TYPE DHT11
 
-// Rotary Encoder Pins (using safe GPIO pins)
-#define ENCODER_CLK 32    // Safe GPIO
-#define ENCODER_DT 34     // Safe GPIO  
-#define ENCODER_SW 21     // Safe GPIO
+#define ENCODER_CLK 32
+#define ENCODER_DT 34
+#define ENCODER_SW 21
 
 #define WIFI_SCAN_INTERVAL 10000
 
@@ -70,6 +72,13 @@ struct WiFiNetworkInfo
     uint8_t channel;
     String bssid;
     bool isHidden;
+};
+
+struct BLENetworkInfo
+{
+    String name;
+    String address;
+    int32_t rssi;
 };
 
 extern WiFiUDP ntpUDP;
@@ -124,6 +133,15 @@ extern uint32_t maxPps;
 extern unsigned long lastPacketTime;
 extern int monitorChannel;
 extern bool promiscuousModeActive;
+
+extern bool inBleScreen;
+extern bool inBleScanScreen;
+extern int selectedBleButton;
+extern int bleScanResultCount;
+extern int bleScrollOffset;
+extern BLENetworkInfo bleNetworks[20];
+
+extern bool inGraphScreen;
 
 void setPromiscuousMode(bool enable, int channel = -1);
 
