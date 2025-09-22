@@ -50,6 +50,11 @@ int bleScanResultCount = 0;
 int bleScrollOffset = 0;
 BLENetworkInfo bleNetworks[20];
 
+bool inClassicScanScreen = false;
+int classicScanResultCount = 0;
+int classicScrollOffset = 0;
+BLENetworkInfo classicNetworks[20];
+
 bool inGraphScreen = false;
 
 int packetHistory[NUM_CHANNELS][MAX_PACKET_HISTORY] = {0};
@@ -160,7 +165,7 @@ void setup()
     WiFi.scanDelete();
 
     #ifdef ENABLE_BLE
-      ble_init();
+      bt_init();
     #endif
 
     setupSensors();
@@ -254,6 +259,19 @@ void loop()
     }
     else if (inBleScanScreen)
     {
+        if (currentMillis - previousMillis >= 100)
+        {
+            previousMillis = currentMillis;
+            updateBleScanScreen();
+        }
+    }
+    else if (inClassicScanScreen)
+    {
+        if (currentMillis - previousMillis >= 100)
+        {
+            previousMillis = currentMillis;
+            updateClassicScanScreen();
+        }
     }
     else if (inGraphScreen)
     {
