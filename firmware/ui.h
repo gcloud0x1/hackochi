@@ -8,6 +8,24 @@
 #include <Arduino.h>
 
 int moveMacTextUpSukiCriesHard = 8;
+int petFrame = 0;
+unsigned long lastFrameUpdate = 0;
+unsigned long lastTextUpdate = 0;
+String currentMoodText = "";
+unsigned long lastMoodChangeTime = 0;
+unsigned long lastInteractionTime = 0;
+const unsigned long BORED_TIMEOUT = 7000;
+const unsigned long SLEEP_TIMEOUT = 60000;
+unsigned long specialMoodEndTime = 0;
+PetMood moodBeforeSpecial;
+bool wasConnected = false;
+
+int currentOpenCount = 0;
+int currentClosedCount = 0;
+int totalNetworksFoundSinceEntry = 0;
+int scanSessionCount = 0;
+unsigned long nextScanTime = 0;
+const unsigned long SCAN_INTERVAL = 8000;
 
 void setCurrentFont();
 void setSmallFont();
@@ -47,8 +65,19 @@ void showBleScreen();
 void drawBleButtons();
 void showBleScanScreen();
 void drawBleTable();
-void showBleGraphScreen();
 void updateBleScanScreen();
+void showClassicScanScreen();
+void updateClassicScanScreen();
+void drawClassicTable();
+void showBleGraphScreen();
+void drawBleWaterfallHeader();
+void drawBleWaterfallGraph(int x, int y, int width, int height);
+void drawBleWaterfallButtons();
+void updateBleWaterfallScreen();
+void showPetScreen();
+void updatePetScreen();
+void drawPet(PetMood mood);
+void drawPetPopup();
 
 void setCurrentFont()
 {
@@ -145,9 +174,9 @@ void drawButton(const char* text, int x, int y, int width, bool selected)
     {
         tft.drawRoundRect(x, y, width, BUTTON_HEIGHT, 4, TERMINAL_GREEN);
     }
-    int textWidth = getTextWidth(text);
+    int textWidth = getSmallTextWidth(text);
     int textX = x + (width - textWidth) / 2;
-    drawText(text, textX, y + 4, textColor);
+    drawSmallText(text, textX, y + 8, textColor);
 }
 
 void drawButtons()
@@ -156,8 +185,8 @@ void drawButtons()
     int buttonWidth = (tft.width() - 20 - BUTTON_SPACING * 3) / 4;
     tft.fillRect(8, buttonY - 2, tft.width() - 16, BUTTON_HEIGHT + 4, TERMINAL_BG);
 
-    const char* buttonTexts[] = {"Temp", "Humi", "Graph", "WiFi", "BLE"};
-    int numButtons = 5;
+    const char* buttonTexts[] = {"Temp", "Humi", "Graph", "WiFi", "BLE", "Pet"};
+    int numButtons = 6;
     int maxVisibleButtons = 4;
     
     int startButton = 0;
@@ -180,7 +209,7 @@ void drawButtons()
 void drawTerminalHeader()
 {
     tft.fillRect(0, 0, tft.width(), 30, TERMINAL_HEADER);
-    const char* title = "HackOchi v0.9";
+    const char* title = "HackOchi v1.0";
     int textWidth = getTextWidth(title);
     drawText(title, (tft.width() - textWidth) / 2, 8, ILI9341_WHITE);
 }
@@ -206,7 +235,10 @@ void drawMainScreen()
     inWaterfallScreen = false;
     inBleScreen = false;
     inBleScanScreen = false;
+    inClassicScanScreen = false;
     inGraphScreen = false;
+    inBleWaterfallScreen = false;
+    inPetScreen = false;
 }
 
 void showTemperatureScreen()
@@ -217,7 +249,10 @@ void showTemperatureScreen()
     inWaterfallScreen = false;
     inBleScreen = false;
     inBleScanScreen = false;
+    inClassicScanScreen = false;
     inGraphScreen = false;
+    inBleWaterfallScreen = false;
+    inPetScreen = false;
     tft.fillScreen(TERMINAL_BG);
     drawTerminalHeader();
     drawText("TEMPERATURE DETAILS", 40, 40, TERMINAL_AMBER);
@@ -242,7 +277,10 @@ void showHumidityScreen()
     inWaterfallScreen = false;
     inBleScreen = false;
     inBleScanScreen = false;
+    inClassicScanScreen = false;
     inGraphScreen = false;
+    inBleWaterfallScreen = false;
+    inPetScreen = false;
     tft.fillScreen(TERMINAL_BG);
     drawTerminalHeader();
     drawText("HUMIDITY DETAILS", 40, 40, TERMINAL_BLUE);
@@ -281,7 +319,10 @@ void showGraphScreen()
         inWaterfallScreen = false;
         inBleScreen = false;
         inBleScanScreen = false;
+        inClassicScanScreen = false;
         inGraphScreen = true;
+        inBleWaterfallScreen = false;
+        inPetScreen = false;
         tft.fillScreen(TERMINAL_BG);
         drawTerminalHeader();
         for (int i = 0; i < numPoints; i++)
@@ -446,7 +487,10 @@ void showWifiScreen()
     inWaterfallScreen = false;
     inBleScreen = false;
     inBleScanScreen = false;
+    inClassicScanScreen = false;
     inGraphScreen = false;
+    inBleWaterfallScreen = false;
+    inPetScreen = false;
     tft.fillScreen(TERMINAL_BG);
     drawTerminalHeader();
     if (WiFi.status() != WL_CONNECTED)
@@ -536,7 +580,10 @@ void showWifiScanScreen()
     inWaterfallScreen = false;
     inBleScreen = false;
     inBleScanScreen = false;
+    inClassicScanScreen = false;
     inGraphScreen = false;
+    inBleWaterfallScreen = false;
+    inPetScreen = false;
     if (wifiScanResultCount == 0)
     {
         scanNetworks();
@@ -583,9 +630,9 @@ void drawWifiTable()
         }
         drawSmallText(ssidDisplay.c_str(), 10, y, net.isHidden ? TERMINAL_AMBER : TERMINAL_GREEN);
         String macDisplay = net.bssid;
-        int macTextWidth  = getTinyTextWidth(macDisplay.c_str());
-        int macBoxHeight  = 14;
-        int macBoxWidth   = macTextWidth + 10;
+        int macTextWidth = getTinyTextWidth(macDisplay.c_str());
+        int macBoxHeight = 14;
+        int macBoxWidth = macTextWidth + 10;
         int macX = 10;
         int macY = y + 12;
         tft.fillRoundRect(macX, macY, macBoxWidth, macBoxHeight, 6, TERMINAL_BG);
@@ -593,13 +640,43 @@ void drawWifiTable()
         int textX = macX + (macBoxWidth - macTextWidth) / 2;
         int textY = macY + (macBoxHeight / 2) - moveMacTextUpSukiCriesHard;
         drawTinyText(macDisplay.c_str(), textX, textY, TERMINAL_BLUE);
-        int32_t cappedRssi   = net.rssi > -100 ? net.rssi : -100;
-        int rssiStrength     = map(cappedRssi, -100, -30, 0, RSSI_BAR_MAX_WIDTH);
-        uint16_t barColor    = (net.rssi > -60) ? TERMINAL_GREEN : (net.rssi > -80) ? TERMINAL_AMBER : ILI9341_RED;
+        int32_t cappedRssi = net.rssi > -100 ? net.rssi : -100;
+        int rssiStrength = map(cappedRssi, -100, -30, 0, RSSI_BAR_MAX_WIDTH);
+        uint16_t barColor = (net.rssi > -60) ? TERMINAL_GREEN : (net.rssi > -80) ? TERMINAL_AMBER : ILI9341_RED;
         tft.fillRect(160, y, RSSI_BAR_MAX_WIDTH, 7, TERMINAL_BG);
         tft.fillRect(160, y, rssiStrength, 7, barColor);
         tft.drawRect(160, y, RSSI_BAR_MAX_WIDTH, 7, TERMINAL_GREEN);
-        String enc = getEncryptionTypeString(net.encryptionType).substring(0, 3);
+        String enc;
+        switch (net.encryptionType) 
+        {
+            case WIFI_AUTH_OPEN:
+                enc = "OPE";
+                break;
+            case WIFI_AUTH_WEP:
+                enc = "WEP";
+                break;
+            case WIFI_AUTH_WPA_PSK:
+                enc = "WPA";
+                break;
+            case WIFI_AUTH_WPA2_PSK:
+                enc = "WP2";
+                break;
+            case WIFI_AUTH_WPA_WPA2_PSK:
+                enc = "W12";
+                break;
+            case WIFI_AUTH_WPA3_PSK:
+                enc = "WP3";
+                break;
+            case WIFI_AUTH_WPA2_ENTERPRISE:
+                enc = "W2E";
+                break;
+            case WIFI_AUTH_WPA3_ENT_192:
+                enc = "W3E";
+                break;
+            default:
+                enc = "UNK";
+                break;
+        }
         drawSmallText(enc.c_str(), 240, y, TERMINAL_BLUE);
         char chStr[4];
         snprintf(chStr, sizeof(chStr), "%d", net.channel);
@@ -713,7 +790,10 @@ void showWaterfallScreen()
     inWaterfallScreen = true;
     inBleScreen = false;
     inBleScanScreen = false;
+    inClassicScanScreen = false;
     inGraphScreen = false;
+    inBleWaterfallScreen = false;
+    inPetScreen = false;
     maxPps = 0;
     setPromiscuousMode(true, currentChannel);
     tft.fillScreen(TERMINAL_BG);
@@ -825,28 +905,35 @@ void showBleScreen()
     inWaterfallScreen = false;
     inBleScreen = true;
     inBleScanScreen = false;
+    inClassicScanScreen = false;
     inGraphScreen = false;
+    inBleWaterfallScreen = false;
+    inPetScreen = false;
     tft.fillScreen(TERMINAL_BG);
     drawTerminalHeader();
-    drawText("Bluetooth LE", 80, 100, TERMINAL_BLUE);
+    drawText("Bluetooth Menu", 80, 100, TERMINAL_BLUE);
     drawBleButtons();
 }
 
 void drawBleButtons()
 {
     int buttonY = tft.height() - BUTTON_HEIGHT - 10;
-    int buttonWidth = (tft.width() - 20 - BUTTON_SPACING * 2) / 3;
-    clearArea(8, buttonY - 2, tft.width() - 16, BUTTON_HEIGHT + 4);
-    drawButton("Scan", 10, buttonY, buttonWidth, selectedBleButton == 0);
-    drawButton("Graph", 10 + (buttonWidth + BUTTON_SPACING), buttonY, buttonWidth, selectedBleButton == 1);
-    drawButton("Back", 10 + 2 * (buttonWidth + BUTTON_SPACING), buttonY, buttonWidth, selectedBleButton == 2);
+    int buttonWidth = (tft.width() - 20 - BUTTON_SPACING * 3) / 4;
+    clearArea(8, buttonY-2, tft.width()-16, BUTTON_HEIGHT+4);
+    drawButton("BLE Scan", 10, buttonY, buttonWidth, selectedBleButton == 0);
+    drawButton("BT Scan", 10 + (buttonWidth + BUTTON_SPACING), buttonY, buttonWidth, selectedBleButton == 1);
+    drawButton("Graph", 10 + 2 * (buttonWidth + BUTTON_SPACING), buttonY, buttonWidth, selectedBleButton == 2);
+    drawButton("Back", 10 + 3 * (buttonWidth + BUTTON_SPACING), buttonY, buttonWidth, selectedBleButton == 3);
 }
 
 void showBleScanScreen()
 {
     inBleScreen = false;
     inBleScanScreen = true;
+    inClassicScanScreen = false;
     inGraphScreen = false;
+    inBleWaterfallScreen = false;
+    inPetScreen = false;
     if (bleScanResultCount == 0)
     {
         scanBLE();
@@ -929,27 +1016,881 @@ void showBleGraphScreen()
     inWaterfallScreen = false;
     inBleScreen = false;
     inBleScanScreen = false;
+    inClassicScanScreen = false;
     inGraphScreen = false;
+    inBleWaterfallScreen = true;
+    inPetScreen = false;
+    
+    maxBlePps = 0;
+    startBleGraphScan();
+    
+    tft.fillScreen(TERMINAL_BG);
+    drawBleWaterfallHeader();
+    drawBleWaterfallGraph(10, 15, tft.width() - 20, 180);
+    drawBleWaterfallButtons();
+}
+
+void drawBleWaterfallHeader()
+{
+    int headerY = 6;
+    int screenWidth = tft.width();
+    clearArea(0, 0, screenWidth, 14);
+    
+    const char* title = "BLE ADV (CH 37,38,39)";
+    int titleWidth = getSmallTextWidth(title);
+    drawSmallText(title, (screenWidth / 2) - (titleWidth / 2) - 35, headerY, TERMINAL_AMBER);
+    
+    int pps = blePacketHistory[0];
+    if (pps > maxBlePps) 
+    {
+        maxBlePps = pps;
+    }
+    
+    char stats[25];
+    snprintf(stats, sizeof(stats), "PPS:%d Max:%d", pps, maxBlePps);
+    int statsWidth = getSmallTextWidth(stats);
+    drawSmallText(stats, screenWidth - statsWidth - 2, headerY, TERMINAL_GREEN);
+}
+
+void drawBleWaterfallGraph(int x, int y, int width, int height)
+{
+    clearArea(x, y, width, height + 15);
+    int centerX = x + (width / 2);
+    tft.drawFastVLine(centerX, y, height, TERMINAL_GREEN);
+    int singleDigitWidth = getSmallTextWidth("0");
+    int doubleDigitWidth = getSmallTextWidth("50");
+    drawSmallText("0", centerX - (singleDigitWidth / 2) - 3, y + height + 4, TERMINAL_GREEN);
+    
+    for (int i = 1; i <= 5; i++) 
+    {
+        int offset = (width / 2) * i / 5;
+        char label[4];
+        snprintf(label, sizeof(label), "%d", i * 10);
+        int rightX = centerX + offset - (doubleDigitWidth / 2) - 2;
+        drawSmallText(label, rightX, y + height + 4, TERMINAL_GREEN);
+        int leftX = centerX - offset - (doubleDigitWidth / 2) - 2;
+        drawSmallText(label, leftX, y + height + 4, TERMINAL_GREEN);
+    }
+
+    uint16_t noiseColor = tft.color565(0, 0, 30);
+    for (int timeSlot = 0; timeSlot < MAX_PACKET_HISTORY; timeSlot++)
+    {
+        int lineY = y + timeSlot;
+        tft.drawFastHLine(x, lineY, width, noiseColor);
+        int packets = blePacketHistory[timeSlot];
+        
+        if (packets > 0)
+        {
+            int halfLineLength = map(packets, 0, 50, 0, width / 2);
+            halfLineLength = constrain(halfLineLength, 0, width / 2);
+            int intensity = map(packets, 0, 50, 0, 255);
+            intensity = constrain(intensity, 0, 255);
+            
+            uint16_t color;
+            if (intensity < 64) 
+            {
+                color = tft.color565(0, 0, map(intensity, 0, 63, 30, 255));
+            } 
+            else if (intensity < 128) 
+            {
+                color = tft.color565(0, map(intensity, 64, 127, 0, 255), 255);
+            } 
+            else if (intensity < 192) 
+            {
+                color = tft.color565(map(intensity, 128, 191, 0, 255), 255, map(intensity, 128, 191, 255, 0));
+            } 
+            else 
+            {
+                color = tft.color565(255, 255, map(intensity, 192, 255, 0, 255));
+            }
+            
+            tft.drawFastHLine(centerX - halfLineLength, lineY, halfLineLength * 2, color);
+        }
+    }
+}
+
+void drawBleWaterfallButtons()
+{
+    int buttonY = tft.height() - BUTTON_HEIGHT - 3;
+    int buttonWidth = (tft.width() - 20 - BUTTON_SPACING) / 2;
+    clearArea(8, buttonY - 2, tft.width() - 16, BUTTON_HEIGHT + 4);
+    drawButton("Clear", 10, buttonY, buttonWidth, selectedBleWaterfallButton == 0);
+    drawButton("Back", 10 + (buttonWidth + BUTTON_SPACING), buttonY, buttonWidth, selectedBleWaterfallButton == 1);
+}
+
+void updateBleWaterfallScreen()
+{
+    if (!inBleWaterfallScreen) return;
+    drawBleWaterfallHeader();
+    drawBleWaterfallGraph(10, 15, tft.width() - 20, 180);
+}
+
+void showClassicScanScreen()
+{
+    inBleScreen = false;
+    inBleScanScreen = false;
+    inClassicScanScreen = true;
+    inGraphScreen = false;
+    inBleWaterfallScreen = false;
+    inPetScreen = false;
+    if (classicScanResultCount == 0)
+    {
+        scanClassicBT();
+    }
+    tft.fillScreen(TERMINAL_BG);
+    drawSmallText("Name",   10,  8, TERMINAL_AMBER);
+    drawSmallText("Signal", 160, 8, TERMINAL_AMBER);
+    drawSmallText("Type",   230, 8, TERMINAL_AMBER);
+    drawSmallText("RSSI",   280, 8, TERMINAL_AMBER);
+    tft.drawFastHLine(0, 24, tft.width(), TERMINAL_GREEN);
+    clearArea(0, 28, tft.width(), tft.height() - 28);
+    drawClassicTable();
+}
+
+void updateClassicScanScreen()
+{
+    static unsigned long lastScan = 0;
+    if (millis() - lastScan > WIFI_SCAN_INTERVAL)
+    {
+        scanClassicBT();
+        lastScan = millis();
+        Serial.printf("Rescanned: %d Classic BT devices\n", classicScanResultCount);
+    }
+    clearArea(0, 28, tft.width(), tft.height() - 28);
+    drawClassicTable();
+}
+
+void drawClassicTable()
+{
+    int startRow = classicScrollOffset;
+    int endRow   = min(startRow + MAX_VISIBLE_WIFI_ROWS, classicScanResultCount);
+    int headerBottom = 28;
+    int rowSpacing   = 38;
+    int topPadding   = 6;
+    clearArea(0, headerBottom, tft.width(), tft.height() - headerBottom);
+    for (int i = startRow; i < endRow; i++)
+    {
+        int rowIndex = i - startRow;
+        int y = headerBottom + topPadding + (rowIndex * rowSpacing);
+        BLENetworkInfo dev = classicNetworks[i];
+        String nameDisplay = dev.name.substring(0, SSID_MAX_CHARS);
+        if (nameDisplay.length() == 0)
+        {
+            nameDisplay = "[Hidden]";
+        }
+        drawSmallText(nameDisplay.c_str(), 10, y, dev.name.length() == 0 ? TERMINAL_AMBER : TERMINAL_GREEN);
+        String addressDisplay = dev.address;
+        int macTextWidth  = getTinyTextWidth(addressDisplay.c_str());
+        int macBoxHeight  = 14;
+        int macBoxWidth   = macTextWidth + 10;
+        int macX = 10;
+        int macY = y + 12;
+        tft.fillRoundRect(macX, macY, macBoxWidth, macBoxHeight, 6, TERMINAL_BG);
+        tft.drawRoundRect(macX, macY, macBoxWidth, macBoxHeight, 6, TERMINAL_BLUE);
+        int textX = macX + (macBoxWidth - macTextWidth) / 2;
+        int textY = macY + (macBoxHeight / 2) - moveMacTextUpSukiCriesHard;
+        drawTinyText(addressDisplay.c_str(), textX, textY, TERMINAL_BLUE);
+        tft.fillRect(160, y, RSSI_BAR_MAX_WIDTH, 7, TERMINAL_BG);
+        tft.drawRect(160, y, RSSI_BAR_MAX_WIDTH, 7, TERMINAL_GREEN);
+        drawSmallText("BT", 235, y, TERMINAL_BLUE);
+        drawSmallText("N/A", 280, y, TERMINAL_GREEN);
+    }
+    if (classicScanResultCount == 0)
+    {
+        drawSmallText("No devices found", 80, 100, ILI9341_RED);
+    }
+}
+
+
+void drawPetStatsDashboard() 
+{
+    int y1 = 38;
+    int y2 = 53;
+    int y3 = 68;
+    
+    int col1_label_x = 15;
+    int col1_value_x = 90; 
+    
+    int col2_label_x = 170;
+    int col2_value_x = 270;
+
+    clearArea(0, y1 - 2, tft.width(), 45);
+
+    char valStr[6];
+
+    drawSmallText("Scan:", col1_label_x, y1, TERMINAL_AMBER);
+    snprintf(valStr, sizeof(valStr), "%d", scanSessionCount);
+    drawSmallText(valStr, col1_value_x, y1, ILI9341_CYAN);
+
+    drawSmallText("Total:", col2_label_x, y1, TERMINAL_AMBER);
+
+    drawSmallText("Open:", col1_label_x, y2, TERMINAL_AMBER);
+    snprintf(valStr, sizeof(valStr), "%d", currentOpenCount);
+    drawSmallText(valStr, col1_value_x, y2, (currentOpenCount > 0) ? ILI9341_GREEN : ILI9341_WHITE);
+
+    drawSmallText("Current:", col2_label_x, y2, TERMINAL_AMBER);
+    snprintf(valStr, sizeof(valStr), "%d", wifiScanResultCount);
+    drawSmallText(valStr, col2_value_x, y2, ILI9341_WHITE);
+
+    drawSmallText("Close:", col1_label_x, y3, TERMINAL_AMBER);
+    snprintf(valStr, sizeof(valStr), "%d", currentClosedCount);
+    drawSmallText(valStr, col1_value_x, y3, ILI9341_WHITE);
+
+    drawSmallText("Session:", col2_label_x, y3, TERMINAL_AMBER);
+    snprintf(valStr, sizeof(valStr), "%d", totalNetworksFoundSinceEntry);
+    drawSmallText(valStr, col2_value_x, y3, ILI9341_CYAN);
+}
+
+void showPetScreen() 
+{
+    inMainScreen = false;
+    inPetScreen = true;
+
     tft.fillScreen(TERMINAL_BG);
     drawTerminalHeader();
-    drawText("BLE Graph", 90, 80, TERMINAL_AMBER);
-    drawText("Coming Soon!", 75, 120);
-    drawText("Press SELECT to return", 20, 220, TERMINAL_AMBER);
+    currentPetMood = AWAKE;
+    lastInteractionTime = millis();
+
+    currentOpenCount = 0;
+    currentClosedCount = 0;
+    wifiScanResultCount = 0;
+    totalNetworksFoundSinceEntry = 0;
+    scanSessionCount = 0;
+    
+    drawPetStatsDashboard();
+
+    WiFi.scanNetworks(true);
+    nextScanTime = millis() + SCAN_INTERVAL + 5000;
+}
+
+void playColorStrobeFlash() 
+{
+    uint16_t colors[] = {ILI9341_RED, ILI9341_YELLOW, ILI9341_GREEN, ILI9341_CYAN, ILI9341_BLUE, ILI9341_MAGENTA};
+    int numColors = sizeof(colors) / sizeof(uint16_t);
+
+    for (int i = 0; i < 2; i++) 
+    {
+        for (int j = 0; j < numColors; j++) 
+        {
+            tft.fillScreen(colors[j]);
+            delay(35);
+        }
+    }
+}
+
+
+const char* getMoodDescription(PetMood mood) 
+{
+    switch (mood) 
+    {
+        case AWAKE: return "Awake & Alert";
+        case SCANNING: return "Scanning Networks";
+        case FOCUSED: return "Focused on Task";
+        case HAPPY: return "Happy & Playful";
+        case BORED: return "Feeling Bored";
+        case SLEEPING: return "Sleeping Zzz";
+        default: return "Unknown";
+    }
+}
+
+const char* getStatusDescription(PetMood mood, int frame) 
+{
+    switch (mood) 
+    {
+        case AWAKE: return "Waiting for the next hunt...";
+        case ECSTATIC: return "OPEN NETWORK! AHHHHHYAEE!";
+        case HAPPY: return "A good haul! Nice!";
+        case SCANNING: return "Hunting for signals...";
+        case FOCUSED: return "Shhh... I'm listening.";
+        case SAD: return "Aww, the trail went cold...";
+        case SLEEPING: return "Zzz... Resting between hunts...";
+        default: return "Just a moment...";
+    }
+}
+
+void drawMoodDescription(PetMood mood) 
+{
+    const char* description = getMoodDescription(mood);
+    const char* status = getStatusDescription(mood, petFrame);
+
+    const int footerY = 200;
+    const int footerHeight = 40;
+
+    const int moodTextY = footerY + 4;
+    const int statusTextY = footerY + 24;
+
+    clearArea(0, footerY, tft.width(), footerHeight);
+
+    uint16_t textColor = ILI9341_WHITE;
+    switch (mood) 
+    {
+        case HAPPY: textColor = ILI9341_GREEN; break;
+        case SCANNING: textColor = TERMINAL_BLUE; break;
+        case FOCUSED: textColor = TERMINAL_AMBER; break;
+        case SLEEPING: textColor = ILI9341_CYAN; break;
+        case BORED: textColor = ILI9341_LIGHTGREY; break;
+        default: textColor = ILI9341_WHITE; break;
+    }
+    
+    int moodTextWidth = getTextWidth(description);
+    int moodTextX = (tft.width() - moodTextWidth) / 2;
+    drawText(description, moodTextX, moodTextY, textColor);
+    
+    int statusTextWidth = getSmallTextWidth(status);
+    int statusTextX = (tft.width() - statusTextWidth) / 2;
+    drawSmallText(status, statusTextX, statusTextY, textColor);
+}
+
+void drawPet(PetMood mood) 
+{
+    int petX = tft.width() / 2 - 32;
+    int petY = tft.height() / 2 - 15;
+    int pixelSize = 4;
+    int spriteW = 16 * pixelSize;
+    int spriteH = 16 * pixelSize;
+
+    clearArea(petX - 12, petY - 12, spriteW + 24, spriteH + 24);
+
+    uint16_t bodyColor = TERMINAL_AMBER;
+    uint16_t earColor = TERMINAL_AMBER;
+    uint16_t earInnerColor = ILI9341_PINK;
+    uint16_t faceColor = ILI9341_WHITE;
+    uint16_t eyeColor = ILI9341_WHITE;
+    uint16_t pupilColor = ILI9341_BLACK;
+    uint16_t noseColor = ILI9341_BLACK;
+    uint16_t mouthColor = ILI9341_BLACK;
+    uint16_t tailColor = TERMINAL_AMBER;
+    uint16_t tailTipColor = ILI9341_WHITE;
+    
+    if (petIsCold) 
+    {
+        bodyColor = TERMINAL_BLUE;
+    }
+    if (petIsHot) 
+    {
+        bodyColor = ILI9341_RED;
+    }
+
+    int bounceY = 0;
+    if (mood == ECSTATIC) 
+    {
+        bounceY = sin(millis() / 150.0) * 6;
+    }
+    else if (mood == HAPPY) 
+    {
+        bounceY = sin(millis() / 500.0) * 2;
+    }
+    
+    int animFrame = petFrame % 2;
+
+    auto drawPixel = [&](int row, int col, uint16_t color) 
+    {
+        tft.fillRect(petX + col * pixelSize, petY + row * pixelSize + bounceY, pixelSize, pixelSize, color);
+    };
+
+    switch (mood) 
+    {
+        case ECSTATIC:
+        {
+            for (int r = 5; r <= 10; r++) 
+            {
+                for (int c = 4; c <= 11; c++) 
+                {
+                    if ((r == 5 && (c >= 5 && c <= 10)) || (r == 6 && (c >= 4 && c <= 11)) || (r >= 7 && r <= 10 && (c >= 3 && c <= 12))) 
+                    {
+                        drawPixel(r, c, bodyColor);
+                    }
+                }
+            }
+            
+            drawPixel(1, 5, earColor);
+            drawPixel(1, 10, earColor);
+            drawPixel(2, 4, earColor);
+            drawPixel(2, 5, earInnerColor);
+            drawPixel(2, 10, earColor);
+            drawPixel(2, 11, earInnerColor);
+            drawPixel(4, 5, faceColor);
+            drawPixel(4, 6, faceColor);
+            drawPixel(4, 9, faceColor);
+            drawPixel(4, 10, faceColor);
+            drawPixel(5, 4, faceColor);
+            drawPixel(5, 5, faceColor);
+            drawPixel(5, 6, faceColor);
+            drawPixel(5, 9, faceColor);
+            drawPixel(5, 10, faceColor);
+            drawPixel(5, 11, faceColor);
+            drawPixel(5, 6, pupilColor);
+            drawPixel(5, 9, pupilColor);
+            drawPixel(7, 6, mouthColor);
+            drawPixel(7, 7, mouthColor);
+            drawPixel(7, 8, mouthColor);
+            drawPixel(7, 9, mouthColor);
+            drawPixel(6, 7, mouthColor);
+            drawPixel(6, 8, mouthColor);
+            
+            int tailOffset = animFrame * 2 - 1;
+            drawPixel(8, 12, tailColor);
+            drawPixel(9, 13 + tailOffset, tailColor);
+            drawPixel(10, 13, tailColor);
+            drawPixel(11, 12, tailColor);
+            drawPixel(11, 13, tailTipColor);
+            
+            if(animFrame == 0) 
+            {
+                drawPixel(2, 2, ILI9341_YELLOW);
+                drawPixel(10, 1, ILI9341_YELLOW);
+                drawPixel(7, 14, ILI9341_YELLOW);
+            }
+            else 
+            {
+                drawPixel(1, 13, ILI9341_YELLOW);
+                drawPixel(12, 4, ILI9341_YELLOW);
+                drawPixel(5, 1, ILI9341_YELLOW);
+            }
+            break;
+        }
+
+        case SAD:
+        {
+            for (int r = 6; r <= 10; r++) 
+            {
+                for (int c = 4; c <= 11; c++) 
+                {
+                    if ((r == 6 && (c >= 5 && c <= 10)) || (r >= 7 && r <= 10 && (c >= 4 && c <= 11))) 
+                    {
+                        drawPixel(r, c, bodyColor);
+                    }
+                }
+            }
+            
+            drawPixel(4, 5, earColor);
+            drawPixel(4, 10, earColor);
+            drawPixel(5, 4, earColor);
+            drawPixel(5, 5, earInnerColor);
+            drawPixel(5, 10, earColor);
+            drawPixel(5, 11, earInnerColor);
+            drawPixel(5, 6, faceColor);
+            drawPixel(5, 9, faceColor);
+            drawPixel(6, 5, faceColor);
+            drawPixel(6, 6, faceColor);
+            drawPixel(6, 7, faceColor);
+            drawPixel(6, 8, faceColor);
+            drawPixel(6, 9, faceColor);
+            drawPixel(6, 10, faceColor);
+            drawPixel(6, 6, pupilColor);
+            drawPixel(6, 9, pupilColor);
+            drawPixel(8, 7, mouthColor);
+            drawPixel(8, 8, mouthColor);
+            drawPixel(9, 6, mouthColor);
+            drawPixel(9, 9, mouthColor);
+            drawPixel(7, 6 + animFrame, ILI9341_BLUE);
+            break;
+        }
+            
+        case AWAKE:
+        {
+            for (int r = 5; r <= 10; r++) 
+            {
+                for (int c = 4; c <= 11; c++) 
+                {
+                    if ((r == 5 && (c >= 5 && c <= 10)) || (r == 6 && (c >= 4 && c <= 11)) || (r >= 7 && r <= 10 && (c >= 3 && c <= 12))) 
+                    {
+                        drawPixel(r, c, bodyColor);
+                    }
+                }
+            }
+            
+            drawPixel(2, 5, earColor);
+            drawPixel(2, 10, earColor);
+            drawPixel(3, 4, earColor);
+            drawPixel(3, 5, earInnerColor);
+            drawPixel(3, 10, earColor);
+            drawPixel(3, 11, earInnerColor);
+            drawPixel(4, 4, earColor);
+            drawPixel(4, 11, earColor);
+            drawPixel(4, 5, faceColor);
+            drawPixel(4, 6, faceColor);
+            drawPixel(4, 9, faceColor);
+            drawPixel(4, 10, faceColor);
+            drawPixel(5, 4, faceColor);
+            drawPixel(5, 5, faceColor);
+            drawPixel(5, 6, faceColor);
+            drawPixel(5, 9, faceColor);
+            drawPixel(5, 10, faceColor);
+            drawPixel(5, 11, faceColor);
+            drawPixel(6, 5, faceColor);
+            drawPixel(6, 10, faceColor);
+            drawPixel(5, 6, eyeColor);
+            drawPixel(5, 9, eyeColor);
+            
+            if (animFrame == 0) 
+            {
+                drawPixel(5, 6, pupilColor);
+                drawPixel(5, 9, pupilColor);
+            }
+            
+            drawPixel(6, 7, noseColor);
+            drawPixel(6, 8, noseColor);
+            drawPixel(8, 12, tailColor);
+            drawPixel(9, 13, tailColor);
+            drawPixel(10, 13, tailColor);
+            drawPixel(11, 12, tailColor);
+            drawPixel(11, 13, tailTipColor);
+            break;
+        }
+        
+        case SCANNING:
+        {
+            for (int r = 5; r <= 10; r++) 
+            {
+                for (int c = 4; c <= 11; c++) 
+                {
+                    if ((r == 5 && (c >= 5 && c <= 10)) || (r == 6 && (c >= 4 && c <= 11)) || (r >= 7 && r <= 10 && (c >= 3 && c <= 12))) 
+                    {
+                        drawPixel(r, c, bodyColor);
+                    }
+                }
+            }
+            
+            drawPixel(2, 5 + animFrame, earColor);
+            drawPixel(2, 10 - animFrame, earColor);
+            drawPixel(3, 4 + animFrame, earColor);
+            drawPixel(3, 5 + animFrame, earInnerColor);
+            drawPixel(3, 10 - animFrame, earColor);
+            drawPixel(3, 11 - animFrame, earInnerColor);
+            drawPixel(4, 5, faceColor);
+            drawPixel(4, 6, faceColor);
+            drawPixel(4, 9, faceColor);
+            drawPixel(4, 10, faceColor);
+            drawPixel(5, 4, faceColor);
+            drawPixel(5, 5, faceColor);
+            drawPixel(5, 6, faceColor);
+            drawPixel(5, 9, faceColor);
+            drawPixel(5, 10, faceColor);
+            drawPixel(5, 11, faceColor);
+            drawPixel(5, 6, TERMINAL_BLUE);
+            drawPixel(5, 9, TERMINAL_BLUE);
+            drawPixel(4, 6, TERMINAL_BLUE);
+            drawPixel(6, 6, TERMINAL_BLUE);
+            drawPixel(5, 5, TERMINAL_BLUE);
+            drawPixel(5, 7, TERMINAL_BLUE);
+            drawPixel(4, 9, TERMINAL_BLUE);
+            drawPixel(6, 9, TERMINAL_BLUE);
+            drawPixel(5, 8, TERMINAL_BLUE);
+            drawPixel(5, 10, TERMINAL_BLUE);
+            drawPixel(6, 7, noseColor);
+            drawPixel(6, 8, noseColor);
+            drawPixel(8, 12 + animFrame, tailColor);
+            drawPixel(9, 13 + animFrame, tailColor);
+            drawPixel(10, 13 + animFrame, tailColor);
+            drawPixel(11, 12 + animFrame, tailColor);
+            drawPixel(11, 13 + animFrame, tailTipColor);
+            break;
+        }
+        
+        case HAPPY:
+        {
+            for (int r = 5; r <= 10; r++) 
+            {
+                for (int c = 4; c <= 11; c++) 
+                {
+                    if ((r == 5 && (c >= 5 && c <= 10)) || (r == 6 && (c >= 4 && c <= 11)) || (r >= 7 && r <= 10 && (c >= 3 && c <= 12))) 
+                    {
+                        drawPixel(r, c, bodyColor);
+                    }
+                }
+            }
+            
+            drawPixel(1, 5, earColor);
+            drawPixel(1, 10, earColor);
+            drawPixel(2, 4, earColor);
+            drawPixel(2, 5, earInnerColor);
+            drawPixel(2, 10, earColor);
+            drawPixel(2, 11, earInnerColor);
+            drawPixel(4, 5, faceColor);
+            drawPixel(4, 6, faceColor);
+            drawPixel(4, 9, faceColor);
+            drawPixel(4, 10, faceColor);
+            drawPixel(5, 4, faceColor);
+            drawPixel(5, 5, faceColor);
+            drawPixel(5, 6, faceColor);
+            drawPixel(5, 9, faceColor);
+            drawPixel(5, 10, faceColor);
+            drawPixel(5, 11, faceColor);
+            drawPixel(5, 6, pupilColor);
+            drawPixel(5, 9, pupilColor);
+            drawPixel(7, 6, mouthColor);
+            drawPixel(7, 7, mouthColor);
+            drawPixel(7, 8, mouthColor);
+            drawPixel(7, 9, mouthColor);
+            drawPixel(6, 7, mouthColor);
+            drawPixel(6, 8, mouthColor);
+            
+            int tailOffset = animFrame * 2 - 1;
+            drawPixel(8, 12, tailColor);
+            drawPixel(9, 13 + tailOffset, tailColor);
+            drawPixel(10, 13, tailColor);
+            drawPixel(11, 12, tailColor);
+            drawPixel(11, 13, tailTipColor);
+            break;
+        }
+        
+        case FOCUSED:
+        {
+            for (int r = 5; r <= 10; r++) 
+            {
+                for (int c = 4; c <= 11; c++) 
+                {
+                    if ((r == 5 && (c >= 5 && c <= 10)) || (r == 6 && (c >= 4 && c <= 11)) || (r >= 7 && r <= 10 && (c >= 3 && c <= 12))) 
+                    {
+                        drawPixel(r, c, bodyColor);
+                    }
+                }
+            }
+            
+            drawPixel(2, 6, earColor);
+            drawPixel(2, 9, earColor);
+            drawPixel(3, 5, earColor);
+            drawPixel(3, 6, earInnerColor);
+            drawPixel(3, 9, earColor);
+            drawPixel(3, 10, earInnerColor);
+            drawPixel(4, 6, faceColor);
+            drawPixel(4, 7, faceColor);
+            drawPixel(4, 8, faceColor);
+            drawPixel(4, 9, faceColor);
+            drawPixel(5, 5, faceColor);
+            drawPixel(5, 6, faceColor);
+            drawPixel(5, 7, faceColor);
+            drawPixel(5, 8, faceColor);
+            drawPixel(5, 9, faceColor);
+            drawPixel(5, 10, faceColor);
+            drawPixel(5, 6, pupilColor);
+            drawPixel(5, 9, pupilColor);
+            drawPixel(4, 6, pupilColor);
+            drawPixel(6, 6, pupilColor);
+            drawPixel(4, 9, pupilColor);
+            drawPixel(6, 9, pupilColor);
+            drawPixel(6, 7, noseColor);
+            drawPixel(6, 8, noseColor);
+            drawPixel(8, 12, tailColor);
+            drawPixel(9, 13, tailColor);
+            drawPixel(10, 13, tailColor);
+            drawPixel(11, 12, tailColor);
+            drawPixel(11, 13, tailTipColor);
+            break;
+        }
+        
+        case BORED:
+        {
+            for (int r = 6; r <= 10; r++) 
+            {
+                for (int c = 4; c <= 11; c++) 
+                {
+                    if ((r == 6 && (c >= 5 && c <= 10)) || (r >= 7 && r <= 10 && (c >= 4 && c <= 11))) 
+                    {
+                        drawPixel(r, c, bodyColor);
+                    }
+                }
+            }
+            
+            drawPixel(4, 5, earColor);
+            drawPixel(4, 10, earColor);
+            drawPixel(5, 4, earColor);
+            drawPixel(5, 5, earInnerColor);
+            drawPixel(5, 10, earColor);
+            drawPixel(5, 11, earInnerColor);
+            drawPixel(5, 6, faceColor);
+            drawPixel(5, 9, faceColor);
+            drawPixel(6, 5, faceColor);
+            drawPixel(6, 6, faceColor);
+            drawPixel(6, 7, faceColor);
+            drawPixel(6, 8, faceColor);
+            drawPixel(6, 9, faceColor);
+            drawPixel(6, 10, faceColor);
+            drawPixel(6, 6, pupilColor);
+            drawPixel(6, 9, pupilColor);
+            drawPixel(7, 7, mouthColor);
+            drawPixel(7, 8, mouthColor);
+            drawPixel(9, 12, tailColor);
+            drawPixel(10, 13, tailColor);
+            drawPixel(11, 12, tailColor);
+            break;
+        }
+        
+        case SLEEPING:
+        {
+            for (int r = 6; r <= 10; r++) 
+            {
+                for (int c = 5; c <= 10; c++) 
+                {
+                    if ((r == 6 && (c >= 6 && c <= 9)) || (r == 7 && (c >= 5 && c <= 10)) || (r >= 8 && r <= 10 && (c >= 4 && c <= 11))) 
+                    {
+                        drawPixel(r, c, bodyColor);
+                    }
+                }
+            }
+            
+            drawPixel(5, 6, earColor);
+            drawPixel(5, 9, earColor);
+            drawPixel(6, 6, faceColor);
+            drawPixel(6, 9, faceColor);
+            drawPixel(7, 5, faceColor);
+            drawPixel(7, 6, faceColor);
+            drawPixel(7, 7, faceColor);
+            drawPixel(7, 8, faceColor);
+            drawPixel(7, 9, faceColor);
+            drawPixel(7, 10, faceColor);
+            drawPixel(7, 6, pupilColor);
+            drawPixel(7, 9, pupilColor);
+            drawTinyText("Z", petX - 20, petY - 12 - (animFrame * 2), ILI9341_WHITE);
+            drawTinyText("z", petX, petY - 8 - (animFrame * 2), ILI9341_WHITE);
+            break;
+        }
+    }
+}
+
+void updatePetScreen() 
+{
+    if (!inPetScreen) return;
+
+    if (millis() - lastFrameUpdate > 400) 
+    {
+        petFrame = (petFrame + 1) % 2;
+        lastFrameUpdate = millis();
+    }
+    
+    if (specialMoodEndTime > 0 && millis() >= specialMoodEndTime) 
+    {
+        specialMoodEndTime = 0;
+        currentPetMood = AWAKE;
+    }
+
+    int n = WiFi.scanComplete();
+    if (n >= 0) 
+    {
+        scanSessionCount++;
+        wifiScanResultCount = n;
+        currentOpenCount = 0;
+        for (int i = 0; i < n; i++) 
+        {
+            if (WiFi.encryptionType(i) == WIFI_AUTH_OPEN) 
+            {
+                currentOpenCount++;
+            }
+        }
+        currentClosedCount = n - currentOpenCount;
+        totalNetworksFoundSinceEntry += n;
+        
+        drawPetStatsDashboard();
+
+        if (currentOpenCount > 0) 
+        {
+            currentPetMood = ECSTATIC;
+            specialMoodEndTime = millis() + 4000;
+            
+            playColorStrobeFlash();
+
+            tft.fillScreen(TERMINAL_BG);
+            drawTerminalHeader();
+            drawPetStatsDashboard();
+
+            
+            drawTerminalHeader();
+            drawPetStatsDashboard();
+
+        }
+        else if (n >= 4) 
+        {
+            currentPetMood = HAPPY;
+            specialMoodEndTime = millis() + 6000;
+        } 
+        else 
+        {
+            currentPetMood = SAD;
+            specialMoodEndTime = millis() + 3000;
+        }
+        
+        WiFi.scanDelete();
+        nextScanTime = millis() + SCAN_INTERVAL;
+    }
+
+    if (specialMoodEndTime == 0) 
+    {
+        if (WiFi.scanComplete() == -1) 
+        {
+            currentPetMood = SCANNING;
+        } 
+        else if (millis() >= nextScanTime) 
+        {
+            WiFi.scanNetworks(true);
+            currentPetMood = SCANNING;
+        } 
+        else if (millis() - lastInteractionTime > SLEEP_TIMEOUT) 
+        {
+            currentPetMood = SLEEPING;
+        } 
+        else 
+        {
+            currentPetMood = AWAKE;
+        }
+    }
+    
+    drawPet(currentPetMood);
+    String newStatusText = String(getStatusDescription(currentPetMood, petFrame));
+    if (newStatusText != currentMoodText) 
+    {
+        drawMoodDescription(currentPetMood);
+        currentMoodText = newStatusText;
+    }
+}
+
+void drawPetPopup() 
+{
+    int popupW = 260;
+    int popupH = 100;
+    int popupX = (tft.width() - popupW) / 2;
+    int popupY = (tft.height() - popupH) / 2;
+
+    tft.fillRoundRect(popupX, popupY, popupW, popupH, 8, TERMINAL_BG);
+    tft.drawRoundRect(popupX, popupY, popupW, popupH, 8, TERMINAL_AMBER);
+    tft.drawRoundRect(popupX+1, popupY+1, popupW-2, popupH-2, 8, TERMINAL_AMBER);
+    
+    drawText("A new entity detected...", popupX + 20, popupY + 10, TERMINAL_GREEN);
+    drawText("Awaken it?", popupX + 70, popupY + 30, TERMINAL_GREEN);
+    
+    int btnW = 80;
+    int btnY = popupY + 65;
+    drawButton("Yes", popupX + 30, btnY, btnW, selectedPopupButton == 0);
+    drawButton("No", popupX + popupW - btnW - 30, btnY, btnW, selectedPopupButton == 1);
 }
 
 void handleEncoderRotation(int direction)
 {
     if (millis() - lastEncoderPress < encoderDebounce) return;
+
+    if (inPetPopup) 
+    {
+        selectedPopupButton = (selectedPopupButton + direction + 2) % 2;
+        drawPetPopup();
+        return;
+    }
+    if (inPetScreen) 
+    {
+        currentPetMood = HAPPY;
+        lastMoodChangeTime = millis();
+        return;
+    }
+
     if (inMainScreen)
     {
-        selectedButton = (selectedButton + direction + 5) % 5;
+        selectedButton = (selectedButton + direction + 6) % 6;
         drawButtons();
-    } 
+    }
     else if (inWifiScreen)
     {
         selectedWifiButton = (selectedWifiButton + direction + 3) % 3;
         drawWifiButtons();
-    } 
+    }
     else if (inWifiScanScreen)
     {
         if (direction > 0)
@@ -977,8 +1918,13 @@ void handleEncoderRotation(int direction)
     }
     else if (inBleScreen)
     {
-        selectedBleButton = (selectedBleButton + direction + 3) % 3;
+        selectedBleButton = (selectedBleButton + direction + 4) % 4;
         drawBleButtons();
+    }
+    else if (inBleWaterfallScreen)
+    {
+        selectedBleWaterfallButton = (selectedBleWaterfallButton + direction + 2) % 2;
+        drawBleWaterfallButtons();
     }
     else if (inBleScanScreen)
     {
@@ -1000,12 +1946,45 @@ void handleEncoderRotation(int direction)
             }
         }
     }
+    else if (inClassicScanScreen)
+    {
+        if (direction > 0)
+        {
+            int maxOffset = max(0, classicScanResultCount - MAX_VISIBLE_WIFI_ROWS);
+            if (classicScrollOffset < maxOffset)
+            {
+                classicScrollOffset++;
+                drawClassicTable();
+            }
+        }
+        else
+        {
+            if (classicScrollOffset > 0)
+            {
+                classicScrollOffset--;
+                drawClassicTable();
+            }
+        }
+    }
 }
 
 void handleEncoderButton()
 {
-    if (millis() - lastEncoderPress < encoderDebounce) return;
-    lastEncoderPress = millis();
+    if (inPetPopup) 
+    {
+        if (selectedPopupButton == 0) 
+        {
+            showPetScreen();
+        } 
+        else 
+        {
+            drawMainScreen();
+            updateDisplay(); 
+        }
+        inPetPopup = false;
+        return;
+    }
+
     if (inMainScreen)
     {
         switch (selectedButton)
@@ -1015,6 +1994,7 @@ void handleEncoderButton()
             case 2: showGraphScreen(); break;
             case 3: showWifiScreen(); break;
             case 4: showBleScreen(); break;
+            case 5: showPetScreen(); break;
         }
     } 
     else if (inWifiScreen)
@@ -1065,12 +2045,35 @@ void handleEncoderButton()
         switch(selectedBleButton)
         {
             case 0: showBleScanScreen(); break;
-            case 1: showBleGraphScreen(); break;
-            case 2: drawMainScreen(); break;
+            case 1: showClassicScanScreen(); break;
+            case 2: showBleGraphScreen(); break;
+            case 3: drawMainScreen(); break;
+        }
+    }
+    else if (inBleWaterfallScreen)
+    {
+        switch(selectedBleWaterfallButton)
+        {
+            case 0:
+                blePacketCount = 0;
+                lastBleCount = 0;
+                maxBlePps = 0;
+                break;
+            case 1:
+                stopBleGraphScan();
+                inBleWaterfallScreen = false;
+                showBleScreen();
+                break;
         }
     }
     else if (inBleScanScreen)
     {
+        inBleScanScreen = false;
+        showBleScreen();
+    }
+    else if (inClassicScanScreen)
+    {
+        inClassicScanScreen = false;
         showBleScreen();
     }
     else

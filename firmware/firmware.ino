@@ -19,6 +19,8 @@ unsigned long lastSensorRead = 0;
 unsigned long lastEncoderPress = 0;
 const long interval = 1000;
 const long encoderDebounce = 200;
+unsigned long encoderPressStartTime = 0;
+const long longPressDuration = 1000;
 
 float batteryVoltage = 0.0;
 int batteryPercentage = 100;
@@ -57,6 +59,14 @@ BLENetworkInfo classicNetworks[20];
 
 bool inGraphScreen = false;
 
+bool inBleWaterfallScreen = false;
+int selectedBleWaterfallButton = 0;
+int blePacketHistory[MAX_PACKET_HISTORY] = {0};
+uint32_t blePacketCount = 0;
+uint32_t lastBleCount = 0;
+uint32_t maxBlePps = 0;
+unsigned long lastBlePacketTime = 0;
+
 int packetHistory[NUM_CHANNELS][MAX_PACKET_HISTORY] = {0};
 int currentChannel = 6;
 int selectedWaterfallButton = 0;
@@ -75,9 +85,36 @@ bool encoderButtonPressed = false;
 int lastEncoderCLK = HIGH;
 bool lastButtonState = HIGH;
 
+bool inPetScreen = false;
+PetMood currentPetMood = AWAKE;
+bool petIsHot = false;
+bool petIsCold = false;
+bool petIsSad = false;
+
+bool inPetPopup = false;
+int selectedPopupButton = 0;
+unsigned long dashboardStartTime = 0;
+bool popupHasBeenShown = false;
+const long popupDelay = 5000;
+
 void ICACHE_RAM_ATTR sniffer_callback(void* buf, wifi_promiscuous_pkt_type_t type)
 {
     packetCount++;
+}
+
+void updateBlePacketHistory()
+{
+    for (int i = MAX_PACKET_HISTORY - 1; i > 0; i--)
+    {
+        blePacketHistory[i] = blePacketHistory[i - 1];
+    }
+    uint32_t pps = blePacketCount - lastBleCount;
+    blePacketHistory[0] = pps;
+    lastBleCount = blePacketCount;
+    if (pps > maxBlePps)
+    {
+        maxBlePps = pps;
+    }
 }
 
 void setPromiscuousMode(bool enable, int channel)
@@ -98,24 +135,16 @@ void setPromiscuousMode(bool enable, int channel)
         Serial.printf("Enabling promiscuous mode on channel %d\n", channel);
         promiscuousModeActive = true;
         monitorChannel = channel;
-
         esp_wifi_stop();
         esp_wifi_deinit();
-
         wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
         esp_wifi_init(&cfg);
-
         esp_wifi_set_storage(WIFI_STORAGE_RAM);
-
         esp_wifi_set_mode(WIFI_MODE_NULL);
-
         esp_wifi_start();
-
         esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
-        
         esp_wifi_set_promiscuous_rx_cb(&sniffer_callback);
         esp_wifi_set_promiscuous(true);
-
         packetCount = 0;
         lastCount = 0;
     }
@@ -123,20 +152,14 @@ void setPromiscuousMode(bool enable, int channel)
     {
         Serial.println("Disabling promiscuous mode and returning to STA mode");
         promiscuousModeActive = false;
-
         esp_wifi_set_promiscuous(false);
         esp_wifi_stop();
         esp_wifi_deinit();
-
         wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
         esp_wifi_init(&cfg);
-
         esp_wifi_set_storage(WIFI_STORAGE_RAM);
-
         esp_wifi_set_mode(WIFI_MODE_STA);
-
         esp_wifi_start();
-
         WiFi.begin(ssid, password);
     }
 }
@@ -173,6 +196,7 @@ void setup()
     setupEncoder();
     runBootSequence();
     drawMainScreen();
+    dashboardStartTime = millis();
     Serial.println("HackOchi Terminal Started");
     Serial.println("Rotary Encoder Navigation Ready");
 }
@@ -180,7 +204,14 @@ void setup()
 void loop()
 {
     unsigned long currentMillis = millis();
-    
+
+    if (inMainScreen && !popupHasBeenShown && currentMillis - dashboardStartTime > popupDelay)
+    {
+        inPetPopup = true;
+        popupHasBeenShown = true;
+        drawPetPopup();
+    }
+
     int currentCLK = digitalRead(ENCODER_CLK);
     if (lastEncoderCLK != currentCLK)
     {
@@ -197,7 +228,7 @@ void loop()
             }
         }
     }
-    
+
     if (encoderPos != lastEncoderPos)
     {
         if (encoderPos > lastEncoderPos)
@@ -210,19 +241,32 @@ void loop()
         }
         lastEncoderPos = encoderPos;
     }
-    
+
     bool currentButtonState = digitalRead(ENCODER_SW);
     if (currentButtonState == LOW && lastButtonState == HIGH)
     {
-        if (millis() - lastEncoderPress > encoderDebounce)
+        encoderPressStartTime = currentMillis;
+    }
+    else if (currentButtonState == HIGH && lastButtonState == LOW)
+    {
+        if (currentMillis - encoderPressStartTime < longPressDuration)
         {
-            handleEncoderButton();
-            lastEncoderPress = millis();
+            if (millis() - lastEncoderPress > encoderDebounce)
+            {
+                handleEncoderButton();
+                lastEncoderPress = millis();
+            }
         }
     }
     lastButtonState = currentButtonState;
-    
-    if (inMainScreen)
+
+    if (inPetScreen && currentButtonState == LOW && currentMillis - encoderPressStartTime > longPressDuration)
+    {
+        drawMainScreen();
+        encoderPressStartTime = 0;
+    }
+
+    if (inMainScreen && !inPetPopup)
     {
         if (currentMillis - previousMillis >= interval)
         {
@@ -233,19 +277,23 @@ void loop()
             {
                 lastDebug = currentMillis;
                 printDebugInfo();
-                Serial.print("WiFi Status: ");
-                Serial.println(WiFi.status());
-                Serial.print("Scan Results: ");
-                Serial.println(wifiScanResultCount);
             }
+        }
+    }
+    else if (inPetScreen)
+    {
+        if (currentMillis - previousMillis >= 200)
+        {
+            previousMillis = currentMillis;
+            updatePetScreen();
         }
     }
     else if (inWifiScanScreen)
     {
         if (currentMillis - previousMillis >= 100)
         {
-             previousMillis = currentMillis;
-             updateWifiScanScreen();
+            previousMillis = currentMillis;
+            updateWifiScanScreen();
         }
     }
     else if (inWaterfallScreen)
@@ -255,6 +303,15 @@ void loop()
             lastPacketTime = currentMillis;
             updatePacketWaterfall();
             updateWaterfallScreen();
+        }
+    }
+    else if (inBleWaterfallScreen)
+    {
+        if (currentMillis - lastBlePacketTime >= 1000)
+        {
+            lastBlePacketTime = currentMillis;
+            updateBlePacketHistory();
+            updateBleWaterfallScreen();
         }
     }
     else if (inBleScanScreen)
@@ -281,6 +338,6 @@ void loop()
             showGraphScreen();
         }
     }
-    
+
     delay(10);
 }

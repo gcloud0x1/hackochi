@@ -81,6 +81,18 @@ struct BLENetworkInfo
     int32_t rssi;
 };
 
+enum PetMood
+{
+    AWAKE,
+    SCANNING,
+    FOCUSED,
+    HAPPY,
+    BORED,
+    SLEEPING,
+    ECSTATIC,
+    SAD
+};
+
 extern WiFiUDP ntpUDP;
 extern NTPClient timeClient;
 extern Adafruit_ILI9341 tft;
@@ -143,6 +155,31 @@ extern BLENetworkInfo bleNetworks[20];
 
 extern bool inGraphScreen;
 
+extern bool inBleWaterfallScreen;
+extern int selectedBleWaterfallButton;
+extern int blePacketHistory[MAX_PACKET_HISTORY];
+extern uint32_t blePacketCount;
+extern uint32_t lastBleCount;
+extern uint32_t maxBlePps;
+extern unsigned long lastBlePacketTime;
+
+extern bool inClassicScanScreen;
+extern int classicScanResultCount;
+extern int classicScrollOffset;
+extern BLENetworkInfo classicNetworks[20];
+
+extern bool inPetScreen;
+extern PetMood currentPetMood;
+extern bool petIsHot;
+extern bool petIsCold;
+extern bool petIsSad;
+extern unsigned long lastMoodChangeTime;
+
+extern bool inPetPopup;
+extern int selectedPopupButton;
+
 void setPromiscuousMode(bool enable, int channel = -1);
+void startBleGraphScan();
+void stopBleGraphScan();
 
 #endif
