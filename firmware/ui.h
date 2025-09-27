@@ -241,6 +241,7 @@ void drawMainScreen()
     inPetScreen = false;
 }
 
+
 void showTemperatureScreen()
 {
     inMainScreen = false;
@@ -253,20 +254,88 @@ void showTemperatureScreen()
     inGraphScreen = false;
     inBleWaterfallScreen = false;
     inPetScreen = false;
+    
     tft.fillScreen(TERMINAL_BG);
     drawTerminalHeader();
-    drawText("TEMPERATURE DETAILS", 40, 40, TERMINAL_AMBER);
+    int titleWidth = getTextWidth("TEMPERATURE DASHBOARD");
+    drawText("TEMPERATURE DASHBOARD", (tft.width() - titleWidth) / 2, 40, TERMINAL_AMBER);
     tft.drawFastHLine(10, 60, tft.width() - 20, TERMINAL_GREEN);
-    char tempStr[20];
-    snprintf(tempStr, sizeof(tempStr), "Current: %.1f C", temperature);
-    drawText(tempStr, 20, 80);
-    snprintf(tempStr, sizeof(tempStr), "Min: 20.0 C");
-    drawText(tempStr, 20, 110);
-    snprintf(tempStr, sizeof(tempStr), "Max: 35.0 C");
-    drawText(tempStr, 20, 140);
-    snprintf(tempStr, sizeof(tempStr), "Avg: 27.5 C");
-    drawText(tempStr, 20, 170);
-    drawText("Press SELECT to return", 20, 220, TERMINAL_AMBER);
+
+    int gaugeX = 100, gaugeY = 145, radius = 70;
+    int minTemp = 0, maxTemp = 60;
+
+    for (int angle = -120; angle <= 120; angle += 2)
+    {
+        float rad = angle * DEG_TO_RAD;
+        int x1 = gaugeX + cos(rad) * (radius - 12);
+        int y1 = gaugeY + sin(rad) * (radius - 12);
+        int x2 = gaugeX + cos(rad) * radius;
+        int y2 = gaugeY + sin(rad) * radius;
+        
+        uint16_t color;
+        if (angle < -60)
+        {
+            color = tft.color565(0, 0, map(angle, -120, -61, 255, 100));
+        }
+        else if (angle < 60)
+        {
+            color = TERMINAL_GREEN;
+        }
+        else
+        {
+            color = tft.color565(map(angle, 60, 120, 200, 255), map(angle, 60, 120, 100, 0), 0);
+        }
+        
+        tft.drawLine(x1, y1, x2, y2, color);
+    }
+    
+    float tempAngle = map(constrain(temperature, minTemp, maxTemp), minTemp, maxTemp, -120, 120) * DEG_TO_RAD;
+    int nx = gaugeX + cos(tempAngle) * (radius - 8);
+    int ny = gaugeY + sin(tempAngle) * (radius - 8);
+    tft.drawLine(gaugeX, gaugeY, nx, ny, ILI9341_WHITE);
+    tft.drawLine(gaugeX+1, gaugeY, nx+1, ny, ILI9341_WHITE);
+    tft.fillCircle(gaugeX, gaugeY, 4, ILI9341_WHITE);
+
+    float leftRad = -120 * DEG_TO_RAD;
+    int leftLabelX = gaugeX + cos(leftRad) * (radius + 2) - 22;
+    int leftLabelY = gaugeY + sin(leftRad) * (radius + 2) - 2;
+    drawTinyText("0C", leftLabelX, leftLabelY, TERMINAL_BLUE);
+    
+    float rightRad = 120 * DEG_TO_RAD;
+    int rightLabelX = gaugeX + cos(rightRad) * (radius + 2) - getTinyTextWidth("60C") - 2;
+    int rightLabelY = gaugeY + sin(rightRad) * (radius + 2) - 2;
+    drawTinyText("60C", rightLabelX, rightLabelY, ILI9341_RED);
+    
+    int panelX = 200, panelY = 80, panelW = 100, panelH = 50;
+    int cornerRadius = 8;
+    
+    tft.fillRoundRect(panelX, panelY, panelW, panelH, cornerRadius, TERMINAL_BG);
+    tft.drawRoundRect(panelX, panelY, panelW, panelH, cornerRadius, TERMINAL_GREEN);
+    int labelWidth = getTinyTextWidth("Current Reading");
+    drawTinyText("Current Reading", panelX + (panelW - labelWidth) / 2, panelY + 5, TERMINAL_AMBER);
+    char tempStr[10];
+    snprintf(tempStr, sizeof(tempStr), "%.1f C", temperature);
+    int tempWidth = getTextWidth(tempStr);
+    drawText(tempStr, panelX + (panelW - tempWidth) / 2, panelY + 25, ILI9341_WHITE);
+
+    const char* status;
+    if (temperature < 18)
+        status = "Cold";
+    else if (temperature > 28)
+        status = "Hot";
+    else
+        status = "Comfortable";
+    tft.fillRoundRect(panelX, panelY + 55, panelW, panelH, cornerRadius, TERMINAL_BG);
+    tft.drawRoundRect(panelX, panelY + 55, panelW, panelH, cornerRadius, TERMINAL_GREEN);
+    labelWidth = getTinyTextWidth("Status");
+    drawTinyText("Status", panelX + (panelW - labelWidth) / 2, panelY + 60, TERMINAL_AMBER);
+    int statusWidth = getTextWidth(status);
+    drawText(status, panelX + (panelW - statusWidth) / 2, panelY + 80, ILI9341_WHITE);
+    
+    char minMaxStr[24];
+    snprintf(minMaxStr, sizeof(minMaxStr), "Avg Min: 20.0C Avg Max: 35.0C");
+    int minMaxWidth = getSmallTextWidth(minMaxStr);
+    drawSmallText(minMaxStr, (tft.width() - minMaxWidth) / 2, 230, ILI9341_WHITE);
 }
 
 void showHumidityScreen()
@@ -281,20 +350,88 @@ void showHumidityScreen()
     inGraphScreen = false;
     inBleWaterfallScreen = false;
     inPetScreen = false;
+
     tft.fillScreen(TERMINAL_BG);
     drawTerminalHeader();
-    drawText("HUMIDITY DETAILS", 40, 40, TERMINAL_BLUE);
+    int titleWidth = getTextWidth("HUMIDITY DASHBOARD");
+    drawText("HUMIDITY DASHBOARD", (tft.width() - titleWidth) / 2, 40, TERMINAL_BLUE);
     tft.drawFastHLine(10, 60, tft.width() - 20, TERMINAL_GREEN);
-    char humStr[20];
-    snprintf(humStr, sizeof(humStr), "Current: %.0f %%", humidity);
-    drawText(humStr, 20, 80);
-    snprintf(humStr, sizeof(humStr), "Min: 30 %%");
-    drawText(humStr, 20, 110);
-    snprintf(humStr, sizeof(humStr), "Max: 80 %%");
-    drawText(humStr, 20, 140);
-    snprintf(humStr, sizeof(humStr), "Avg: 55 %%");
-    drawText(humStr, 20, 170);
-    drawText("Press SELECT to return", 20, 220, TERMINAL_AMBER);
+
+    int gaugeX = 100, gaugeY = 145, radius = 70;
+    int minHum = 0, maxHum = 100;
+
+    for (int angle = -120; angle <= 120; angle += 2)
+    {
+        float rad = angle * DEG_TO_RAD;
+        int x1 = gaugeX + cos(rad) * (radius - 12);
+        int y1 = gaugeY + sin(rad) * (radius - 12);
+        int x2 = gaugeX + cos(rad) * radius;
+        int y2 = gaugeY + sin(rad) * radius;
+        
+        uint16_t color;
+        if (angle < -60)
+        {
+            color = tft.color565(map(angle, -120, -61, 255, 150), map(angle, -120, -61, 165, 100), 0);
+        }
+        else if (angle < 60)
+        {
+            color = TERMINAL_BLUE;
+        }
+        else
+        {
+            color = tft.color565(map(angle, 60, 120, 0, 100), 0, map(angle, 60, 120, 255, 100));
+        }
+        
+        tft.drawLine(x1, y1, x2, y2, color);
+    }
+    
+    float humAngle = map(constrain(humidity, minHum, maxHum), minHum, maxHum, -120, 120) * DEG_TO_RAD;
+    int nx = gaugeX + cos(humAngle) * (radius - 8);
+    int ny = gaugeY + sin(humAngle) * (radius - 8);
+    tft.drawLine(gaugeX, gaugeY, nx, ny, ILI9341_WHITE);
+    tft.drawLine(gaugeX+1, gaugeY, nx+1, ny, ILI9341_WHITE);
+    tft.fillCircle(gaugeX, gaugeY, 4, ILI9341_WHITE);
+
+    float leftRad = -120 * DEG_TO_RAD;
+    int leftLabelX = gaugeX + cos(leftRad) * (radius + 2) - 22;
+    int leftLabelY = gaugeY + sin(leftRad) * (radius + 2) - 2;
+    drawTinyText("0%", leftLabelX, leftLabelY, TERMINAL_AMBER);
+    
+    float rightRad = 120 * DEG_TO_RAD;
+    int rightLabelX = gaugeX + cos(rightRad) * (radius + 2) - getTinyTextWidth("100%") - 2;
+    int rightLabelY = gaugeY + sin(rightRad) * (radius + 2) - 2;
+    drawTinyText("100%", rightLabelX, rightLabelY, ILI9341_MAGENTA);
+    
+    int panelX = 200, panelY = 80, panelW = 100, panelH = 50;
+    int cornerRadius = 8;
+    
+    tft.fillRoundRect(panelX, panelY, panelW, panelH, cornerRadius, TERMINAL_BG);
+    tft.drawRoundRect(panelX, panelY, panelW, panelH, cornerRadius, TERMINAL_GREEN);
+    int labelWidth = getTinyTextWidth("Current Reading");
+    drawTinyText("Current Reading", panelX + (panelW - labelWidth) / 2, panelY + 5, TERMINAL_AMBER);
+    char humStr[10];
+    snprintf(humStr, sizeof(humStr), "%.0f %%", humidity);
+    int humWidth = getTextWidth(humStr);
+    drawText(humStr, panelX + (panelW - humWidth) / 2, panelY + 25, ILI9341_WHITE);
+
+    const char* status;
+    if (humidity < 30)
+        status = "Dry";
+    else if (humidity > 70)
+        status = "Humid";
+    else
+        status = "Comfortable";
+    tft.fillRoundRect(panelX, panelY + 55, panelW, panelH, cornerRadius, TERMINAL_BG);
+    tft.drawRoundRect(panelX, panelY + 55, panelW, panelH, cornerRadius, TERMINAL_GREEN);
+    labelWidth = getTinyTextWidth("Status");
+    drawTinyText("Status", panelX + (panelW - labelWidth) / 2, panelY + 60, TERMINAL_AMBER);
+    int statusWidth = getTextWidth(status);
+    drawText(status, panelX + (panelW - statusWidth) / 2, panelY + 80, ILI9341_WHITE);
+    
+    char minMaxStr[24];
+    snprintf(minMaxStr, sizeof(minMaxStr), "Avg Min: 30%% Avg Max: 80%%");
+    int minMaxWidth = getSmallTextWidth(minMaxStr);
+    drawSmallText(minMaxStr, (tft.width() - minMaxWidth) / 2, 230, ILI9341_WHITE);
 }
 
 void showGraphScreen()
@@ -491,85 +628,137 @@ void showWifiScreen()
     inGraphScreen = false;
     inBleWaterfallScreen = false;
     inPetScreen = false;
+    
     tft.fillScreen(TERMINAL_BG);
     drawTerminalHeader();
+    
     if (WiFi.status() != WL_CONNECTED)
     {
         WiFi.reconnect();
         delay(2000);
     }
+    
     if (WiFi.status() == WL_CONNECTED)
     {
         String ssidStr = WiFi.SSID();
-        String ipStr   = WiFi.localIP().toString();
-        String macStr  = WiFi.macAddress();
-        int32_t rssi   = WiFi.RSSI();
-        int channel    = WiFi.channel();
-        int leftX = 10, leftY = 35, leftW = 140, leftH = 140;
+        String ipStr = WiFi.localIP().toString();
+        String macStr = WiFi.macAddress();
+        int32_t rssi = WiFi.RSSI();
+        int channel = WiFi.channel();
+        
         int cornerRadius = 8;
-        tft.fillRoundRect(leftX, leftY, leftW, leftH, cornerRadius, TERMINAL_BG);
-        tft.drawRoundRect(leftX, leftY, leftW, leftH, cornerRadius, TERMINAL_GREEN);
-        tft.drawRoundRect(leftX + 1, leftY + 1, leftW - 2, leftH - 2, cornerRadius - 1, TERMINAL_GREEN);
-        drawTinyText("SSID:", leftX + 5, leftY + 15, TERMINAL_AMBER);
-        drawSmallText(ssidStr.c_str(), leftX + 50, leftY + 15);
-        drawTinyText("IP:", leftX + 5, leftY + 35, TERMINAL_AMBER);
-        drawSmallText(ipStr.c_str(), leftX + 50, leftY + 35);
-        drawTinyText("MAC:", leftX + 5, leftY + 55, TERMINAL_AMBER);
-        drawTinyText(macStr.c_str(), leftX + 50, leftY + 55, TERMINAL_BLUE);
-        drawTinyText("CH:", leftX + 5, leftY + 75, TERMINAL_AMBER);
+
+        int topLeftX = 10, topLeftY = 35, topLeftW = 140, topLeftH = 80;
+        tft.fillRoundRect(topLeftX, topLeftY, topLeftW, topLeftH, cornerRadius, TERMINAL_BG);
+        tft.drawRoundRect(topLeftX, topLeftY, topLeftW, topLeftH, cornerRadius, TERMINAL_GREEN);
+
+        int labelX = topLeftX + 8;
+        int textY = topLeftY + 0;
+        int lineHeight = 20;
+
+        drawTinyText("SSID:", labelX, textY, TERMINAL_AMBER);
+        if (ssidStr.length() > 14) ssidStr = ssidStr.substring(0, 14);
+        drawTinyText(ssidStr.c_str(), labelX, textY + lineHeight, ILI9341_WHITE);
+
+        drawTinyText("CH:", labelX, textY + lineHeight * 2, TERMINAL_AMBER);
         char chStr[6]; snprintf(chStr, sizeof(chStr), "%d", channel);
-        drawSmallText(chStr, leftX + 50, leftY + 75);
+        drawTinyText(chStr, labelX, textY + lineHeight * 3, ILI9341_WHITE);
+        
+        int bottomLeftX = 10, bottomLeftY = 120, bottomLeftW = 140, bottomLeftH = 80;
+        tft.fillRoundRect(bottomLeftX, bottomLeftY, bottomLeftW, bottomLeftH, cornerRadius, TERMINAL_BG);
+        tft.drawRoundRect(bottomLeftX, bottomLeftY, bottomLeftW, bottomLeftH, cornerRadius, TERMINAL_GREEN);
+
+        labelX = bottomLeftX + 8;
+        textY = bottomLeftY + 0;
+
+        drawTinyText("IP:", labelX, textY, TERMINAL_AMBER);
+        drawTinyText(ipStr.c_str(), labelX, textY + lineHeight, ILI9341_WHITE);
+
+        drawTinyText("MAC:", labelX, textY + lineHeight * 2, TERMINAL_AMBER);
+        drawTinyText(macStr.c_str(), labelX, textY + lineHeight * 3, ILI9341_WHITE);
+        
         int topRightX = 160, topRightY = 35, topRightW = 150, topRightH = 80;
         tft.fillRoundRect(topRightX, topRightY, topRightW, topRightH, cornerRadius, TERMINAL_BG);
         tft.drawRoundRect(topRightX, topRightY, topRightW, topRightH, cornerRadius, TERMINAL_GREEN);
-        tft.drawRoundRect(topRightX + 1, topRightY + 1, topRightW - 2, topRightH - 2, cornerRadius - 1, TERMINAL_GREEN);
-        drawTinyText("Signal Gauge", topRightX + 5, topRightY + 10, TERMINAL_AMBER);
-        int gaugeX = topRightX + 75, gaugeY = topRightY + 45, radius = 28;
-        for (int angle = -90; angle <= 90; angle += 2)
+
+        drawTinyText("Signal Gauge", topRightX + 8, topRightY + 0, TERMINAL_AMBER);
+
+        int gaugeX = topRightX + 75, gaugeY = topRightY + 65, radius = 42;
+        int arcWidth = 16;
+        
+        for (int angle = -180; angle <= 0; angle += 1)
         {
             float rad = angle * DEG_TO_RAD;
-            int x1 = gaugeX + cos(rad) * (radius - 8);
-            int y1 = gaugeY + sin(rad) * (radius - 8);
+            int x1 = gaugeX + cos(rad) * (radius - arcWidth);
+            int y1 = gaugeY + sin(rad) * (radius - arcWidth);
             int x2 = gaugeX + cos(rad) * radius;
             int y2 = gaugeY + sin(rad) * radius;
-            uint16_t color = (angle < -30) ? ILI9341_RED : (angle < 30) ? TERMINAL_AMBER : TERMINAL_GREEN;
-            for (int thickness = 0; thickness < 3; thickness++)
+            
+            uint16_t color;
+            if (angle < -120)
             {
-                tft.drawLine(x1 - thickness, y1 - thickness, x2 - thickness, y2 - thickness, color);
+                int t = map(angle, -180, -120, 0, 255);
+                color = tft.color565(255, t, 0);
             }
+            else if (angle < -60)
+            {
+                int t = map(angle, -120, -60, 0, 255);
+                color = tft.color565(255 - t, 255, 0);
+            }
+            else
+            {
+                int t = map(angle, -60, 0, 0, 255);
+                color = tft.color565(0, 255, t/3);
+            }
+            
+            tft.drawLine(x1, y1, x2, y2, color);
         }
-        tft.drawCircle(gaugeX, gaugeY, radius, TERMINAL_GREEN);
-        tft.drawCircle(gaugeX, gaugeY, radius - 1, TERMINAL_GREEN);
+        
         int32_t cappedRssi = max(-100L, min(-30L, (long)rssi));
-        float angle = map(cappedRssi, -100, -30, -90, 90) * DEG_TO_RAD;
-        int nx = gaugeX + cos(angle) * (radius - 8);
-        int ny = gaugeY + sin(angle) * (radius - 8);
-        for (int thickness = 0; thickness < 3; thickness++)
-        {
-            tft.drawLine(gaugeX - thickness, gaugeY - thickness, nx - thickness, ny - thickness, ILI9341_WHITE);
-        }
-        tft.fillCircle(gaugeX, gaugeY, 3, ILI9341_WHITE);
-        drawTinyText("Weak", gaugeX - 35, gaugeY + radius + 5, ILI9341_RED);
-        drawTinyText("Good", gaugeX + 15, gaugeY + radius + 5, TERMINAL_GREEN);
-        int bottomRightX = 160, bottomRightY = 120, bottomRightW = 150, bottomRightH = 55;
+        float angle = map(cappedRssi, -100, -30, -180, 0) * DEG_TO_RAD;
+        int nx = gaugeX + cos(angle) * (radius - 5);
+        int ny = gaugeY + sin(angle) * (radius - 5);
+        tft.drawLine(gaugeX, gaugeY, nx, ny, ILI9341_WHITE);
+        tft.drawLine(gaugeX + 1, gaugeY, nx + 1, ny, ILI9341_WHITE);
+        tft.fillCircle(gaugeX, gaugeY, 4, ILI9341_WHITE);
+        
+        float weakRad = -180 * DEG_TO_RAD;
+        int weakLabelX = gaugeX + cos(weakRad) * (radius + 6) - getTinyTextWidth("Weak");
+        int weakLabelY = gaugeY + sin(weakRad) * (radius + 6) - 4;
+        drawTinyText("Weak", weakLabelX, weakLabelY, ILI9341_RED);
+        
+        float goodRad = 0 * DEG_TO_RAD;
+        int goodLabelX = gaugeX + cos(goodRad) * (radius + 6);
+        int goodLabelY = gaugeY + sin(goodRad) * (radius + 6) - 4;
+        drawTinyText("Good", goodLabelX, goodLabelY, TERMINAL_GREEN);
+        
+        int bottomRightX = 160, bottomRightY = 120, bottomRightW = 150, bottomRightH = 80;
         tft.fillRoundRect(bottomRightX, bottomRightY, bottomRightW, bottomRightH, cornerRadius, TERMINAL_BG);
         tft.drawRoundRect(bottomRightX, bottomRightY, bottomRightW, bottomRightH, cornerRadius, TERMINAL_GREEN);
-        tft.drawRoundRect(bottomRightX + 1, bottomRightY + 1, bottomRightW - 2, bottomRightH - 2, cornerRadius - 1, TERMINAL_GREEN);
+        
+        int bottomRightLabelX = bottomRightX + 8;
+        int textBottomY = bottomRightY + 0;
+        int bottomLineHeight = 16;
+        
+        drawTinyText("SIGNAL:", bottomRightLabelX, textBottomY, TERMINAL_AMBER);
         char rssiStr[16]; snprintf(rssiStr, sizeof(rssiStr), "%ld dBm", rssi);
-        drawTinyText("Signal:", bottomRightX + 5, bottomRightY + 15, TERMINAL_AMBER);
-        drawSmallText(rssiStr, bottomRightX + 60, bottomRightY + 15);
-        drawTinyText("Quality:", bottomRightX + 5, bottomRightY + 30, TERMINAL_AMBER);
-        const char* quality = (rssi > -60) ? "Good" : (rssi > -75) ? "Moderate" : "Weak";
-        drawSmallText(quality, bottomRightX + 70, bottomRightY + 30);
-        drawTinyText("Lock:", bottomRightX + 5, bottomRightY + 45, TERMINAL_AMBER);
+        drawTinyText(rssiStr, bottomRightLabelX, textBottomY + bottomLineHeight, ILI9341_WHITE);
+        
+        drawTinyText("QUALITY:", bottomRightLabelX, textBottomY + bottomLineHeight * 2, TERMINAL_AMBER);
+        const char* quality = (rssi > -60) ? "Excellent" : (rssi > -75) ? "Good" : "Weak";
+        drawTinyText(quality, bottomRightLabelX, textBottomY + bottomLineHeight * 3, ILI9341_WHITE);
+        
+        drawTinyText("LOCK:", bottomRightLabelX, textBottomY + bottomLineHeight * 4, TERMINAL_AMBER);
         int lockPercent = map(cappedRssi, -100, -30, 0, 100);
         char lockStr[16]; snprintf(lockStr, sizeof(lockStr), "%d%%", lockPercent);
-        drawSmallText(lockStr, bottomRightX + 60, bottomRightY + 45);
+        drawTinyText(lockStr, bottomRightLabelX + 40, textBottomY + bottomLineHeight * 4, ILI9341_WHITE);
     }
     else
     {
-        drawText("WiFi Disconnected", 80, 120, ILI9341_RED);
+        int discWidth = getTextWidth("WiFi Disconnected");
+        drawText("WiFi Disconnected", (tft.width() - discWidth) / 2, 120, ILI9341_RED);
     }
+    
     drawWifiButtons();
 }
 
