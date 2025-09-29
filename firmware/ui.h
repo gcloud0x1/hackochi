@@ -5,6 +5,7 @@
 #include "sensors.h"
 #include "networks.h"
 #include "bluetooth.h"
+#include "obits.h"
 #include <Arduino.h>
 
 int moveMacTextUpSukiCriesHard = 8;
@@ -26,6 +27,10 @@ int totalNetworksFoundSinceEntry = 0;
 int scanSessionCount = 0;
 unsigned long nextScanTime = 0;
 const unsigned long SCAN_INTERVAL = 8000;
+
+unsigned long lastAnimationTime = 0;
+const unsigned long ANIMATION_INTERVAL = 200;  // Pulse every 200ms
+int pulseState = 0;  // For simple pulsing animation (0-3)
 
 void setCurrentFont();
 void setSmallFont();
@@ -1086,6 +1091,73 @@ void updateWaterfallScreen()
     drawWaterfallGraph(10, 15, tft.width() - 20, 180);
 }
 
+
+void drawBleButtons()
+{
+    const int header_height = 30;
+    int centerX = tft.width() / 2;
+    int centerY = header_height + (tft.height() - header_height) / 2;
+    const int radius = 90;
+    const int glowRadius = radius + 10;
+    const int coreRadius = 36;
+    const int iconSize = 64;
+    const int edgePadding = 5;
+
+    clearArea(0, header_height, tft.width(), tft.height() - header_height);
+
+    tft.drawCircle(centerX, centerY, glowRadius, ILI9341_DARKGREEN);
+    tft.drawCircle(centerX, centerY, glowRadius - 3, ILI9341_GREEN);
+    tft.drawCircle(centerX, centerY, glowRadius - 6, TERMINAL_GREEN);
+    tft.drawCircle(centerX, centerY, radius, ILI9341_BLACK);
+
+    tft.fillCircle(centerX, centerY, coreRadius, TERMINAL_BG);
+    tft.drawCircle(centerX, centerY, coreRadius, ILI9341_GREEN);
+    tft.drawCircle(centerX, centerY, coreRadius - 2, ILI9341_GREEN);
+
+    tft.drawBitmap(centerX - (iconSize / 2), centerY - (iconSize / 2), hackochiIcons[selectedBleButton], iconSize, iconSize, hackochiIconColors[selectedBleButton]);
+
+    const char* buttonTexts[] = {"BLE Scan", "BT Scan", "Graph", "Back"};
+    int maxSegWidth = getSmallTextWidth("BLE Scan") + 10;
+    int segHeight = BUTTON_HEIGHT + 5;
+
+    int topX = centerX;
+    int topY = header_height + edgePadding + (segHeight / 2);
+    int bottomX = centerX;
+    int bottomY = tft.height() - edgePadding - (segHeight / 2);
+    int leftX = edgePadding + (maxSegWidth / 2);
+    int leftY = centerY;
+    int rightX = tft.width() - edgePadding - (maxSegWidth / 2);
+    int rightY = centerY;
+
+    struct { int x, y; int index; } positions[] = {
+        {topX, topY, 0},
+        {rightX, rightY, 1},
+        {bottomX, bottomY, 2},
+        {leftX, leftY, 3}
+    };
+
+    for (int i = 0; i < 4; i++) {
+        int segX = positions[i].x;
+        int segY = positions[i].y;
+        int btnIndex = positions[i].index;
+
+        uint16_t textColor = (btnIndex == selectedBleButton) ? ILI9341_BLACK : TERMINAL_GREEN;
+        uint16_t bgColor = (btnIndex == selectedBleButton) ? TERMINAL_GREEN : BUTTON_BG;
+
+        tft.fillRoundRect(segX - maxSegWidth / 2, segY - segHeight / 2, maxSegWidth, segHeight, 4, bgColor);
+        tft.drawRoundRect(segX - maxSegWidth / 2, segY - segHeight / 2, maxSegWidth, segHeight, 4, TERMINAL_GREEN);
+
+        int textWidth = getSmallTextWidth(buttonTexts[btnIndex]);
+        int textX = segX - textWidth / 2;
+        int textY = segY - 4;
+        drawSmallText(buttonTexts[btnIndex], textX, textY, textColor);
+
+        if (btnIndex == selectedBleButton) {
+            tft.drawCircle(centerX, centerY, coreRadius + (millis() % 600) / 120, ILI9341_GREEN);
+        }
+    }
+}
+
 void showBleScreen()
 {
     inMainScreen = false;
@@ -1098,22 +1170,347 @@ void showBleScreen()
     inGraphScreen = false;
     inBleWaterfallScreen = false;
     inPetScreen = false;
-    tft.fillScreen(TERMINAL_BG);
+
+    clearArea(0, 30, tft.width(), tft.height() - 30);
     drawTerminalHeader();
-    drawText("Bluetooth Menu", 80, 100, TERMINAL_BLUE);
     drawBleButtons();
 }
 
-void drawBleButtons()
+void playHackochiActivation(int centerX, int centerY, int coreRadius, int selectedBleButton)
 {
-    int buttonY = tft.height() - BUTTON_HEIGHT - 10;
-    int buttonWidth = (tft.width() - 20 - BUTTON_SPACING * 3) / 4;
-    clearArea(8, buttonY-2, tft.width()-16, BUTTON_HEIGHT+4);
-    drawButton("BLE Scan", 10, buttonY, buttonWidth, selectedBleButton == 0);
-    drawButton("BT Scan", 10 + (buttonWidth + BUTTON_SPACING), buttonY, buttonWidth, selectedBleButton == 1);
-    drawButton("Graph", 10 + 2 * (buttonWidth + BUTTON_SPACING), buttonY, buttonWidth, selectedBleButton == 2);
-    drawButton("Back", 10 + 3 * (buttonWidth + BUTTON_SPACING), buttonY, buttonWidth, selectedBleButton == 3);
+    const int iconSize = 64;
+    int clearX = centerX - (iconSize / 2) - 5;
+    int clearY = centerY - (iconSize / 2) - 5;
+    int clearWidth = iconSize + 10;
+    int clearHeight = iconSize + 10;
+
+    clearArea(clearX, clearY, clearWidth, clearHeight);
+    tft.fillCircle(centerX, centerY, coreRadius, ILI9341_GREEN);
+    delay(70);
+    clearArea(clearX, clearY, clearWidth, clearHeight);
+    tft.fillCircle(centerX, centerY, coreRadius, TERMINAL_BG);
+    tft.drawCircle(centerX, centerY, coreRadius, ILI9341_GREEN);
+    tft.drawBitmap(centerX - (iconSize / 2), centerY - (iconSize / 2), hackochiIcons[selectedBleButton], iconSize, iconSize, hackochiIconColors[selectedBleButton]);
+    delay(50);
+    clearArea(clearX, clearY, clearWidth, clearHeight);
+    tft.fillCircle(centerX, centerY, coreRadius, TERMINAL_BG);
+    delay(30);
+    clearArea(clearX, clearY, clearWidth, clearHeight);
+    tft.fillCircle(centerX, centerY, coreRadius, TERMINAL_BG);
+    tft.drawCircle(centerX, centerY, coreRadius, ILI9341_GREEN);
+    int altIconIndex = (selectedBleButton + 1) % 4;
+    tft.drawBitmap(centerX - (iconSize / 2), centerY - (iconSize / 2), hackochiIcons[altIconIndex], iconSize, iconSize, hackochiIconColors[altIconIndex]);
+    delay(50);
+    clearArea(clearX, clearY, clearWidth, clearHeight);
+    tft.fillCircle(centerX, centerY, coreRadius, ILI9341_GREEN);
+    delay(60);
+    clearArea(clearX, clearY, clearWidth, clearHeight);
 }
+
+void handleEncoderRotation(int direction)
+{
+    if (millis() - lastEncoderPress < encoderDebounce) return;
+
+    Serial.print("Encoder direction: ");
+    Serial.println(direction);
+
+    if (inPetPopup) 
+    {
+        selectedPopupButton = (selectedPopupButton + direction + 2) % 2;
+        drawPetPopup();
+        return;
+    }
+    if (inPetScreen) 
+    {
+        currentPetMood = HAPPY;
+        lastMoodChangeTime = millis();
+        return;
+    }
+
+    if (inMainScreen)
+    {
+        selectedButton = (selectedButton + direction + 6) % 6;
+        drawButtons();
+    }
+    else if (inWifiScreen)
+    {
+        selectedWifiButton = (selectedWifiButton + direction + 3) % 3;
+        drawWifiButtons();
+    }
+    else if (inWifiScanScreen)
+    {
+        if (direction > 0)
+        {
+            int maxOffset = max(0, wifiScanResultCount - MAX_VISIBLE_WIFI_ROWS);
+            if (wifiScrollOffset < maxOffset)
+            {
+                wifiScrollOffset++;
+                updateWifiScanScreen();
+            }
+        }
+        else if (direction < 0)
+        {
+            if (wifiScrollOffset > 0)
+            {
+                wifiScrollOffset--;
+                updateWifiScanScreen();
+            }
+        }
+    }
+    else if (inWaterfallScreen)
+    {
+        selectedWaterfallButton = (selectedWaterfallButton + direction + 4) % 4;
+        drawWaterfallButtons();
+    }
+    else if (inBleScreen)
+    {
+        int prevSelected = selectedBleButton;
+        if (direction > 0) {
+            selectedBleButton = (selectedBleButton + 1) % 4;
+        } else if (direction < 0) {
+            selectedBleButton = (selectedBleButton - 1 + 4) % 4;
+        }
+
+        Serial.print("BLE Screen: selectedBleButton = ");
+        Serial.println(selectedBleButton);
+
+        const int header_height = 30;
+        int centerX = tft.width() / 2;
+        int centerY = header_height + (tft.height() - header_height) / 2;
+        const int radius = 90;
+        const int coreRadius = 36;
+        const int iconSize = 64;
+        const int edgePadding = 5;
+        int maxSegWidth = getSmallTextWidth("BLE Scan") + 10;
+        int segHeight = BUTTON_HEIGHT + 5;
+
+        int clearX = centerX - (iconSize / 2) - 5;
+        int clearY = centerY - (iconSize / 2) - 5;
+        int clearWidth = iconSize + 10;
+        int clearHeight = iconSize + 10;
+        clearArea(clearX, clearY, clearWidth, clearHeight);
+        tft.fillCircle(centerX, centerY, coreRadius, TERMINAL_BG);
+        tft.drawCircle(centerX, centerY, coreRadius, ILI9341_GREEN);
+        tft.drawCircle(centerX, centerY, coreRadius - 2, ILI9341_GREEN);
+        tft.drawBitmap(centerX - (iconSize / 2), centerY - (iconSize / 2), hackochiIcons[selectedBleButton], iconSize, iconSize, hackochiIconColors[selectedBleButton]);
+
+        int topX = centerX;
+        int topY = header_height + edgePadding + (segHeight / 2);
+        int bottomX = centerX;
+        int bottomY = tft.height() - edgePadding - (segHeight / 2);
+        int leftX = edgePadding + (maxSegWidth / 2);
+        int leftY = centerY;
+        int rightX = tft.width() - edgePadding - (maxSegWidth / 2);
+        int rightY = centerY;
+
+        struct { int x, y; int index; } positions[] = {
+            {topX, topY, 0},
+            {rightX, rightY, 1},
+            {bottomX, bottomY, 2},
+            {leftX, leftY, 3}
+        };
+
+        const char* buttonTexts[] = {"BLE Scan", "BT Scan", "Graph", "Back"};
+        for (int i = 0; i < 4; i++) {
+            if (positions[i].index == prevSelected || positions[i].index == selectedBleButton) {
+                int segX = positions[i].x;
+                int segY = positions[i].y;
+                int btnIndex = positions[i].index;
+
+                clearArea(segX - maxSegWidth / 2, segY - segHeight / 2, maxSegWidth, segHeight);
+
+                uint16_t textColor = (btnIndex == selectedBleButton) ? ILI9341_BLACK : TERMINAL_GREEN;
+                uint16_t bgColor = (btnIndex == selectedBleButton) ? TERMINAL_GREEN : BUTTON_BG;
+
+                tft.fillRoundRect(segX - maxSegWidth / 2, segY - segHeight / 2, maxSegWidth, segHeight, 4, bgColor);
+                tft.drawRoundRect(segX - maxSegWidth / 2, segY - segHeight / 2, maxSegWidth, segHeight, 4, TERMINAL_GREEN);
+
+                int textWidth = getSmallTextWidth(buttonTexts[btnIndex]);
+                int textX = segX - textWidth / 2;
+                int textY = segY - 4;
+                drawSmallText(buttonTexts[btnIndex], textX, textY, textColor);
+
+                if (btnIndex == selectedBleButton) {
+                    tft.drawCircle(centerX, centerY, coreRadius + (millis() % 600) / 120, ILI9341_GREEN);
+                }
+            }
+        }
+    }
+    else if (inBleWaterfallScreen)
+    {
+        selectedBleWaterfallButton = (selectedBleWaterfallButton + direction + 2) % 2;
+        drawBleWaterfallButtons();
+    }
+    else if (inBleScanScreen)
+    {
+        if (direction > 0)
+        {
+            int maxOffset = max(0, bleScanResultCount - MAX_VISIBLE_WIFI_ROWS);
+            if (bleScrollOffset < maxOffset)
+            {
+                bleScrollOffset++;
+                drawBleTable();
+            }
+        }
+        else if (direction < 0)
+        {
+            if (bleScrollOffset > 0)
+            {
+                bleScrollOffset--;
+                drawBleTable();
+            }
+        }
+    }
+    else if (inClassicScanScreen)
+    {
+        if (direction > 0)
+        {
+            int maxOffset = max(0, classicScanResultCount - MAX_VISIBLE_WIFI_ROWS);
+            if (classicScrollOffset < maxOffset)
+            {
+                classicScrollOffset++;
+                drawClassicTable();
+            }
+        }
+        else if (direction < 0)
+        {
+            if (classicScrollOffset > 0)
+            {
+                classicScrollOffset--;
+                drawClassicTable();
+            }
+        }
+    }
+}
+
+void handleEncoderButton()
+{
+    if (inPetPopup) 
+    {
+        if (selectedPopupButton == 0) 
+        {
+            showPetScreen();
+        } 
+        else 
+        {
+            drawMainScreen();
+            updateDisplay(); 
+        }
+        inPetPopup = false;
+        return;
+    }
+
+    if (inMainScreen)
+    {
+        switch (selectedButton)
+        {
+            case 0: showTemperatureScreen(); break;
+            case 1: showHumidityScreen(); break;
+            case 2: showGraphScreen(); break;
+            case 3: showWifiScreen(); break;
+            case 4: showBleScreen(); break;
+            case 5: showPetScreen(); break;
+        }
+    } 
+    else if (inWifiScreen)
+    {
+        switch (selectedWifiButton)
+        {
+            case 0: showWifiScanScreen(); break;
+            case 1: showWaterfallScreen(); break;
+            case 2: drawMainScreen(); break;
+        }
+    } 
+    else if (inWifiScanScreen)
+    {
+        inWifiScanScreen = false;
+        showWifiScreen();
+    } 
+    else if (inWaterfallScreen)
+    {
+        switch (selectedWaterfallButton)
+        {
+            case 0:
+                setPromiscuousMode(false);
+                scanNetworks();
+                maxPps = 0;
+                setPromiscuousMode(true, currentChannel);
+                break;
+            case 1:
+                currentChannel = (currentChannel - 2 + NUM_CHANNELS) % NUM_CHANNELS + 1;
+                maxPps = 0;
+                setPromiscuousMode(true, currentChannel);
+                drawWaterfallHeader();
+                break;
+            case 2:
+                currentChannel = (currentChannel % NUM_CHANNELS) + 1;
+                maxPps = 0;
+                setPromiscuousMode(true, currentChannel);
+                drawWaterfallHeader();
+                break;
+            case 3:
+                setPromiscuousMode(false);
+                inWaterfallScreen = false;
+                showWifiScreen();
+                break;
+        }
+    }
+    else if (inBleScreen)
+    {
+        int centerX = tft.width() / 2;
+        int centerY = 30 + (tft.height() - 30) / 2;
+        int coreRadius = 36;
+        playHackochiActivation(centerX, centerY, coreRadius, selectedBleButton);
+        switch(selectedBleButton)
+        {
+            case 0: showBleScanScreen(); break;
+            case 1: showClassicScanScreen(); break;
+            case 2: showBleGraphScreen(); break;
+            case 3: drawMainScreen(); break;
+        }
+    }
+    else if (inBleWaterfallScreen)
+    {
+        switch(selectedBleWaterfallButton)
+        {
+            case 0:
+                blePacketCount = 0;
+                lastBleCount = 0;
+                maxBlePps = 0;
+                break;
+            case 1:
+                stopBleGraphScan();
+                inBleWaterfallScreen = false;
+                showBleScreen();
+                break;
+        }
+    }
+    else if (inBleScanScreen)
+    {
+        inBleScanScreen = false;
+        showBleScreen();
+    }
+    else if (inClassicScanScreen)
+    {
+        inClassicScanScreen = false;
+        showBleScreen();
+    }
+    else
+    {
+        drawMainScreen();
+        lastSensorRead = 0;
+        lastBatteryCheck = 0;
+        lastTime = "";
+        lastTemp = "";
+        lastHumidity = "";
+        lastWifi = "";
+        lastBattery = "";
+        lastHeap = "";
+        lastUptime = "";
+        updateDisplay();
+    }
+}
+
 
 void showBleScanScreen()
 {
@@ -2053,6 +2450,8 @@ void drawPetPopup()
     drawButton("No", popupX + popupW - btnW - 30, btnY, btnW, selectedPopupButton == 1);
 }
 
+
+/*
 void handleEncoderRotation(int direction)
 {
     if (millis() - lastEncoderPress < encoderDebounce) return;
@@ -2280,7 +2679,7 @@ void handleEncoderButton()
         updateDisplay();
     }
 }
-
+*/
 void updateDisplay()
 {
     if (!inMainScreen) return;
