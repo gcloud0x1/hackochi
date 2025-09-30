@@ -7,8 +7,10 @@ HackOchi includes a vast array of features, including a special Pixel spirit pet
 ```see the demo and read till end... thwanks hooman!```  ![ed04e0f4908385ee](https://github.com/user-attachments/assets/f5e06e49-372e-46ec-aeb0-738799668609)
 
 ## Demo and Progress
+[click the below pic to watch on YouTube]
 
-video
+[![Watch the video](https://img.youtube.com/vi/KbD4sx_GSBU/0.jpg)](https://youtu.be/KbD4sx_GSBU)
+
 
 ```scroll to see more images and gifs``` ![ed04e0f4908385ee](https://github.com/user-attachments/assets/f5e06e49-372e-46ec-aeb0-738799668609)
 
