@@ -88,6 +88,7 @@ video
 
 
 ## Hardware Progress
+Started on a simple breadboard prototype, then moved to a perfboard soldered build for stability.
 
 <p align="center">
   <img src="assets/combined_hardware_progress.png" style="border-radius:15px; margin: 8px;">
@@ -95,7 +96,18 @@ video
 
 ### Devlogs (Journey of HackOchi v1.0)
 
-journey pics here 
+### Log 16
+
+https://github.com/user-attachments/assets/c69d4ed6-3c24-478a-9fa3-b2188ecd5793
+
+### Log 15
+
+https://github.com/user-attachments/assets/91beeee7-5dea-4a98-8684-19f50ef7b326
+
+### Log 14
+
+<img width="3440" height="1072" alt="hackochi_devlog14" src="https://github.com/user-attachments/assets/b23a18e8-af12-4143-a2c3-6b8e0bb3f8bb" />
+
 
 ---
 
