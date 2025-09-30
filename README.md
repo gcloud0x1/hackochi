@@ -4,16 +4,15 @@ Welcome, agent. HackOchi is a handheld device for hackers, network, and reconnai
 
 HackOchi includes a vast array of features, including a special Pixel spirit pet called Foxie for non-persistent reconnaissance, a fast Fourier FFT waterfall like graph for Wi-Fi packets and BLE/BT Classic advertisements, and much more.
 
-```see the demo and read till end... thwanks hooman!``` 
-
-:yay
+```see the demo and read till end... thwanks hooman!```  ![ed04e0f4908385ee](https://github.com/user-attachments/assets/f5e06e49-372e-46ec-aeb0-738799668609)
 
 ## Demo and Progress
 
 video
 
 ## Features :
-```(please see the demo video for full HackOchi Experience) ```
+```(please see the demo video for full HackOchi Experience)```  
+
 
 - **Custom Boot Sequence:** A unique HackOchi startup animation to kick things off right.
 
@@ -35,7 +34,7 @@ video
 
 
 
-## Detailed Menu :
+## Detailed Menu : ![28592c2bf509c53f](https://github.com/user-attachments/assets/22b4d902-1c84-43f4-989e-983c66de3120)
 
 
 **Central Dashboard:**
@@ -117,6 +116,7 @@ git clone https://github.com/gcloud0x1/hackochi
 cd hackochi/firmware
 ```
 
+
 ### 2. Create credentials.h
 ```bash
 touch credentials.h
@@ -140,4 +140,4 @@ const char* WIFI_PASS = "YOUR_CAT_NAME_INTERGALACTIC_SUPER_DUPER_ULTRA_MEGA_ASTE
 | ESP8266 | ❌ Not Supported  |
 
 ### 5. Upload the code 
-- :yay
+![b714809bfbdac8da](https://github.com/user-attachments/assets/e6fe0987-4cc4-4645-85a9-8d735c414025)
