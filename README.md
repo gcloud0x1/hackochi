@@ -71,7 +71,6 @@ video
 - Flash notifications: Foxie celebrates open networks with vibrant game style animations and jumps
 - Eg: If ```Foxie``` finds a open network it shows a fancy game flash and jumps and cries 
 
-:yay
 
 **Graph Menu:**
 
@@ -90,7 +89,9 @@ video
 
 ## Hardware Progress
 
-hardware pics will upload it soon :cry
+<p align="center">
+  <img src="assets/combined_hardware_progress.png" style="border-radius:15px; margin: 8px;">
+</p>  
 
 ### Devlogs (Journey of HackOchi v1.0)
 
