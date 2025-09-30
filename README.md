@@ -10,7 +10,9 @@ HackOchi includes a vast array of features, including a special Pixel spirit pet
 
 video
 
-## Features :
+```scroll to see more images and gifs``` ![ed04e0f4908385ee](https://github.com/user-attachments/assets/f5e06e49-372e-46ec-aeb0-738799668609)
+
+## Features : 
 ```(please see the demo video for full HackOchi Experience)```  
 
 
@@ -96,18 +98,35 @@ Started on a simple breadboard prototype, then moved to a perfboard soldered bui
 
 ### Devlogs (Journey of HackOchi v1.0)
 
-### Log 16
+#### Log 16
 
 https://github.com/user-attachments/assets/c69d4ed6-3c24-478a-9fa3-b2188ecd5793
 
-### Log 15
+#### Log 15
 
 https://github.com/user-attachments/assets/91beeee7-5dea-4a98-8684-19f50ef7b326
 
-### Log 14
-
+#### Log 14
 <img width="3440" height="1072" alt="hackochi_devlog14" src="https://github.com/user-attachments/assets/b23a18e8-af12-4143-a2c3-6b8e0bb3f8bb" />
 
+#### Log 13, 12, 11
+| <img src="assets/hackochi_devlog13.gif" width="250"/> | <img src="assets/hackochi_devlog12.gif" width="250"/> | <img src="assets/hackochi_devlog11.gif" width="250"/> |
+|----------------------------------|----------------------------------|----------------------------------|
+
+#### Log 10
+<img width="3440" height="532" alt="hackochi_devlog10" src="https://github.com/user-attachments/assets/9c64febe-34c5-4eee-b5e0-b4d533aacf03" />
+
+#### Log 9, 8, 7
+| <img src="assets/hackochi_devlog9.gif" width="250"/> | <img src="assets/hackochi_devlog8.gif" width="250"/> | <img src="assets/hackochi_devlog7.gif" width="250"/> |
+|----------------------------------|----------------------------------|----------------------------------|
+
+#### Log 6, 5, 4
+| <img src="assets/hackochi_devlog6.gif" width="250"/> | <img src="assets/hackochi_devlog5.gif" width="250"/> | <img src="assets/hackochi_devlog4.gif" width="250"/> |
+|----------------------------------|----------------------------------|----------------------------------|
+
+#### Log 3, 2, 1
+| <img src="assets/hackochi_devlog3.gif" width="250"/> | <img src="assets/hackochi_devlog2.gif" width="250"/> | <img src="assets/hackochi_devlog1.gif" width="250"/> |
+|----------------------------------|----------------------------------|----------------------------------|
 
 ---
 
